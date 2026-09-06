@@ -40,3 +40,8 @@ Terminal prints LAN URL, pair link, and QR; scan on the same Wi-Fi.
 
 Open the in-app page 联网设置 / Remote setup for bilingual Tailscale and Cloudflare Tunnel guides (pros, cons, step-by-step).
 应用内「联网设置」含 Tailscale 与 Cloudflare Tunnel 的中英优缺点与步骤。
+
+## LAN bind
+
+Default listen is 127.0.0.1. Set exposeLan:true in ~/.codex-remote/config.json to bind 0.0.0.0 for phone-on-LAN.
+/api/pair and /api/qr.png require the pair token.

@@ -184,7 +184,17 @@ function setupSpeech() {
 
 function refreshQr() {
   const base = ($('serverUrl').value || defaultServerUrl()).replace(/\/$/, '');
-  $('qrImg').src = `${base}/api/qr.png?t=${Date.now()}`;
+  const token = ($('pairToken').value || localStorage.getItem(LS_TOKEN) || '').trim();
+  const img = $('qrImg');
+  if (!token) {
+    img.removeAttribute('src');
+    img.alt = t('pairingRequired');
+    img.hidden = true;
+    return;
+  }
+  img.hidden = false;
+  img.alt = t('scanQr');
+  img.src = `${base}/api/qr.png?token=${encodeURIComponent(token)}&t=${Date.now()}`;
 }
 
 function init() {

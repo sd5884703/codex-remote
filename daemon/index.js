@@ -30,6 +30,8 @@ function loadConfig() {
       pairToken: crypto.randomBytes(24).toString('hex'),
       createdAt: new Date().toISOString(),
       pairingEnabled: true,
+      exposeLan: false,
+      listenHost: '127.0.0.1',
     };
     fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), { mode: 0o600 });
     return cfg;
@@ -41,6 +43,8 @@ function loadConfig() {
   }
   if (!raw.port) raw.port = DEFAULT_PORT;
   if (raw.pairingEnabled === undefined) raw.pairingEnabled = true;
+  if (raw.exposeLan === undefined) raw.exposeLan = false;
+  if (!raw.listenHost) raw.listenHost = raw.exposeLan ? '0.0.0.0' : '127.0.0.1';
   return raw;
 }
 
@@ -227,6 +231,8 @@ function sendJson(res, status, obj) {
 function extractToken(req, urlObj) {
   const auth = req.headers['authorization'] || '';
   if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+  const hdr = req.headers['x-pair-token'];
+  if (hdr) return String(hdr).trim();
   if (urlObj.searchParams.get('token')) return urlObj.searchParams.get('token');
   return '';
 }
@@ -295,6 +301,11 @@ async function main() {
       }
 
       if (urlObj.pathname === '/api/pair') {
+        const token = extractToken(req, urlObj);
+        if (!tokenOk(cfgNow, token)) {
+          sendJson(res, 401, { ok: false, error: 'pairing_required' });
+          return;
+        }
         const lanNow = getLanIPv4();
         const pairNow = `http://${lanNow.primary}:${port}/?token=${cfgNow.pairToken}`;
         const wsNow = `ws://${lanNow.primary}:${port}/ws?token=${cfgNow.pairToken}`;
@@ -311,6 +322,11 @@ async function main() {
       }
 
       if (urlObj.pathname === '/api/qr.png') {
+        const token = extractToken(req, urlObj);
+        if (!tokenOk(cfgNow, token)) {
+          sendJson(res, 401, { ok: false, error: 'pairing_required' });
+          return;
+        }
         const lanNow = getLanIPv4();
         const pairNow = `http://${lanNow.primary}:${port}/?token=${cfgNow.pairToken}`;
         const png = await QRCode.toBuffer(pairNow, { type: 'png', width: 320, margin: 2 });
@@ -344,7 +360,7 @@ async function main() {
     const urlObj = new URL(req.url || '/ws', `http://${req.headers.host || 'localhost'}`);
     const token = urlObj.searchParams.get('token') || '';
     if (!tokenOk(cfgNow, token)) {
-      socket.send(JSON.stringify({ type: 'error', error: 'pairing_required', message: 'Invalid or missing pair token' }));
+      socket.send(JSON.stringify({ type: 'error', error: 'pairing_required', message: 'Pair token required / 需要配对令牌' }));
       socket.close(1008, 'pairing_required');
       return;
     }
@@ -424,30 +440,34 @@ async function main() {
   });
 
 
-  server.listen(port, '0.0.0.0', async () => {
+  const listenHost = (process.env.LISTEN_HOST || cfg.listenHost || (cfg.exposeLan ? '0.0.0.0' : '127.0.0.1')).trim();
+  const bindHost = cfg.exposeLan || listenHost === '0.0.0.0' ? '0.0.0.0' : '127.0.0.1';
+  server.listen(port, bindHost, async () => {
     const status = getCodexStatus();
     console.log('');
-    console.log('╔══════════════════════════════════════════╗');
-    console.log('║     编码遥控 CodexRemote daemon          ║');
-    console.log('╚══════════════════════════════════════════╝');
-    console.log(`LAN:    http://${lan.primary}:${port}`);
-    console.log(`Pair:   ${pairUrl}`);
-    console.log(`WS:     ${wsUrl}`);
-    console.log(`Config: ${CONFIG_FILE}`);
-    console.log(`Codex:  ${status.found ? status.path : 'NOT FOUND — daemon up; send will error with install hint'}`);
-    if (lan.all.length > 1) {
-      console.log('IPs:');
-      for (const a of lan.all) console.log(`  - ${a.address} (${a.kind}/${a.name})`);
+    console.log('=== CodexRemote daemon ===');
+    console.log(`Bind:   ${bindHost}:${port}`);
+    console.log(`Local:  http://127.0.0.1:${port}`);
+    if (bindHost === '0.0.0.0') {
+      console.log(`LAN:    http://${lan.primary}:${port}`);
+      console.log(`Pair:   ${pairUrl}`);
+      console.log(`WS:     ${wsUrl}`);
+    } else {
+      console.log('LAN expose OFF (default). Set exposeLan:true or listenHost:0.0.0.0 in config to allow phone-on-LAN.');
+      console.log(`Pair (localhost): http://127.0.0.1:${port}/?token=${cfg.pairToken}`);
     }
+    console.log(`Config: ${CONFIG_FILE}`);
+    console.log(`Codex:  ${status.found ? status.path : 'NOT FOUND'}`);
     console.log('');
     try {
-      const qr = await QRCode.toString(pairUrl, { type: 'terminal', small: true });
-      console.log('Scan on phone (same LAN / Tailscale / tunnel):');
+      const qrTarget = bindHost === '0.0.0.0' ? pairUrl : `http://127.0.0.1:${port}/?token=${cfg.pairToken}`;
+      const qr = await QRCode.toString(qrTarget, { type: 'terminal', small: true });
+      console.log('Scan QR (token only shown in this terminal):');
       console.log(qr);
     } catch (e) {
-      console.log('QR (text):', pairUrl);
+      console.log('QR text:', bindHost === '0.0.0.0' ? pairUrl : `http://127.0.0.1:${port}/?token=***`);
     }
-    console.log('Open pair page also at /api/pair  |  health: /api/health');
+    console.log('/api/pair and /api/qr.png require pair token. health: /api/health');
     console.log('');
   });
 }
