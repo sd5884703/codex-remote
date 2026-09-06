@@ -1,0 +1,12 @@
+node_modules/
+.DS_Store
+*.log
+.env
+.env.*
+.codex-remote/
+config.local.json
+history/
+sessions/
+*.tmp
+.idea/
+.vscode/

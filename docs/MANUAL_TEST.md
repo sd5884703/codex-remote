@@ -1,0 +1,13 @@
+# Manual test checklist
+- [ ] Install deps and start daemon
+- [ ] Health endpoint ok
+- [ ] Pair endpoint returns token
+- [ ] Protected status requires token
+- [ ] Missing codex shows install hint on send
+- [ ] Present codex streams assistant text
+- [ ] PWA connects via pair link
+- [ ] Text send and multi-turn work
+- [ ] Language toggle persists
+- [ ] Long-press mic fills editable draft
+- [ ] Setup wizard bilingual Tailscale and Cloudflare
+- [ ] Manifest / add to home screen basic

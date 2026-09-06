@@ -1,0 +1,458 @@
+import { spawn as runChild, spawnSync as runSync } from 'child_process';
+import fs from 'fs';
+import path from 'path';
+import http from 'http';
+import { WebSocketServer } from 'ws';
+import QRCode from 'qrcode';
+import { fileURLToPath } from 'url';
+import os from 'os';
+import crypto from 'crypto';
+
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+const ROOT = path.join(__dirname, '..');
+const PUBLIC = path.join(ROOT, 'public');
+const DEFAULT_PORT = 8787;
+const CONFIG_DIR = path.join(os.homedir(), '.codex-remote');
+const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
+const HISTORY_FILE = path.join(CONFIG_DIR, 'history.jsonl');
+
+function ensureConfigDir() {
+  if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
+}
+
+function loadConfig() {
+  ensureConfigDir();
+  if (!fs.existsSync(CONFIG_FILE)) {
+    const cfg = {
+      port: DEFAULT_PORT,
+      pairToken: crypto.randomBytes(24).toString('hex'),
+      createdAt: new Date().toISOString(),
+      pairingEnabled: true,
+    };
+    fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+    return cfg;
+  }
+  const raw = JSON.parse(fs.readFileSync(CONFIG_FILE, 'utf8'));
+  if (!raw.pairToken) {
+    raw.pairToken = crypto.randomBytes(24).toString('hex');
+    saveConfig(raw);
+  }
+  if (!raw.port) raw.port = DEFAULT_PORT;
+  if (raw.pairingEnabled === undefined) raw.pairingEnabled = true;
+  return raw;
+}
+
+function saveConfig(cfg) {
+  ensureConfigDir();
+  fs.writeFileSync(CONFIG_FILE, JSON.stringify(cfg, null, 2), { mode: 0o600 });
+}
+
+function getLanIPv4() {
+  const ifaces = os.networkInterfaces();
+  const preferred = [];
+  const others = [];
+  for (const name of Object.keys(ifaces)) {
+    for (const iface of ifaces[name] || []) {
+      if (iface.family !== 'IPv4' && iface.family !== 4) continue;
+      if (iface.internal) continue;
+      const addr = iface.address;
+      if (addr.startsWith('100.')) others.push({ name, address: addr, kind: 'tailscale' });
+      else preferred.push({ name, address: addr, kind: 'lan' });
+    }
+  }
+  const list = [...preferred, ...others];
+  return { primary: list[0]?.address || '127.0.0.1', all: list };
+}
+
+
+const CODEX_CANDIDATES = [
+  'codex',
+  '/usr/local/bin/codex',
+  '/opt/homebrew/bin/codex',
+  path.join(os.homedir(), '.local', 'bin', 'codex'),
+  path.join(os.homedir(), '.cargo', 'bin', 'codex'),
+];
+
+let resolvedCodex = null;
+let resolveTried = false;
+
+
+function findCodexBinary() {
+  if (resolveTried) return resolvedCodex;
+  resolveTried = true;
+  for (const candidate of CODEX_CANDIDATES) {
+    if (!candidate) continue;
+    try {
+      if (candidate.includes('/') && !fs.existsSync(candidate)) continue;
+      const r = runSync(candidate, ['--version'], { encoding: 'utf8', timeout: 8000, env: process.env });
+      if (r.error || r.status === 127) continue;
+      resolvedCodex = candidate;
+      return resolvedCodex;
+    } catch { /* next */ }
+  }
+  try {
+    const r = runSync('which', ['codex'], { encoding: 'utf8', timeout: 3000 });
+    if (r.status === 0 && r.stdout.trim()) {
+      resolvedCodex = r.stdout.trim();
+      return resolvedCodex;
+    }
+  } catch { /* ignore */ }
+  resolvedCodex = null;
+  return null;
+}
+
+
+function getCodexStatus() {
+  const bin = findCodexBinary();
+  const hintZh = '未找到本地 codex CLI。请安装并确保在 PATH 中。';
+  const hintEn = 'Codex CLI not found. Install it and ensure it is on PATH.';
+  return { found: Boolean(bin), path: bin, hint: bin ? null : hintZh + ' / ' + hintEn };
+}
+
+function loadHistory() {
+  if (!fs.existsSync(HISTORY_FILE)) return [];
+  return fs.readFileSync(HISTORY_FILE, 'utf8').split('\n').filter(Boolean).map((line) => {
+    try { return JSON.parse(line); } catch { return null; }
+  }).filter(Boolean);
+}
+
+
+function appendHistory(role, content) {
+  ensureConfigDir();
+  fs.appendFileSync(HISTORY_FILE, JSON.stringify({ role, content, ts: new Date().toISOString() }) + '\n');
+}
+
+function clearHistory() {
+  ensureConfigDir();
+  fs.writeFileSync(HISTORY_FILE, '');
+}
+
+function buildPrompt(userText) {
+  const history = loadHistory().slice(-20);
+  const parts = history.map((t) => `${t.role === 'user' ? 'User' : 'Assistant'}: ${t.content}`);
+  parts.push(`User: ${userText}`);
+  parts.push('Assistant:');
+  return parts.join('\n\n');
+}
+
+
+function runCodexTurn(userText, { onChunk, signal } = {}) {
+  return new Promise((resolve, reject) => {
+    const bin = findCodexBinary();
+    if (!bin) {
+      const err = new Error(getCodexStatus().hint);
+      err.code = 'CODEX_NOT_FOUND';
+      reject(err);
+      return;
+    }
+    appendHistory('user', userText);
+    const prompt = buildPrompt(userText);
+    const argsCandidates = [
+      ['exec', '--', prompt],
+      ['exec', prompt],
+      ['exec', '-q', prompt],
+      [prompt],
+    ];
+    let settled = false;
+    let full = '';
+    let stderr = '';
+    let attempt = 0;
+
+    const tryNext = () => {
+      if (attempt >= argsCandidates.length) {
+        const err = new Error(stderr.trim() || 'codex exited without output');
+        err.code = 'CODEX_FAILED';
+        reject(err);
+        return;
+      }
+      const args = argsCandidates[attempt++];
+      full = '';
+      stderr = '';
+      const child = runChild(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+      const onAbort = () => { try { child.kill('SIGTERM'); } catch { /* ignore */ } };
+      if (signal) {
+        if (signal.aborted) onAbort();
+        else signal.addEventListener('abort', onAbort, { once: true });
+      }
+      child.stdout.on('data', (buf) => {
+        const s = buf.toString();
+        full += s;
+        if (onChunk) onChunk(s);
+      });
+      child.stderr.on('data', (buf) => { stderr += buf.toString(); });
+      child.on('error', (e) => { if (!settled) { settled = true; reject(e); } });
+      child.on('close', (code) => {
+        if (settled) return;
+        const looksUsage = /usage:|unrecognized|unknown option|required argument/i.test(stderr) && !full.trim();
+        if (code !== 0 && looksUsage && attempt < argsCandidates.length) { tryNext(); return; }
+        settled = true;
+        if (code !== 0 && !full.trim()) {
+          const err = new Error(stderr.trim() || `codex exited with code ${code}`);
+          err.code = 'CODEX_FAILED';
+          reject(err);
+          return;
+        }
+        const text = full.trim() || stderr.trim();
+        appendHistory('assistant', text);
+        resolve(text);
+      });
+    };
+    tryNext();
+  });
+}
+
+
+const MIME = {
+  '.html': 'text/html; charset=utf-8',
+  '.js': 'text/javascript; charset=utf-8',
+  '.css': 'text/css; charset=utf-8',
+  '.json': 'application/json',
+  '.png': 'image/png',
+  '.svg': 'image/svg+xml',
+  '.ico': 'image/x-icon',
+  '.webmanifest': 'application/manifest+json',
+};
+
+function sendJson(res, status, obj) {
+  const body = JSON.stringify(obj);
+  res.writeHead(status, {
+    'Content-Type': 'application/json; charset=utf-8',
+    'Cache-Control': 'no-store',
+  });
+  res.end(body);
+}
+
+function extractToken(req, urlObj) {
+  const auth = req.headers['authorization'] || '';
+  if (auth.toLowerCase().startsWith('bearer ')) return auth.slice(7).trim();
+  if (urlObj.searchParams.get('token')) return urlObj.searchParams.get('token');
+  return '';
+}
+
+function tokenOk(cfg, token) {
+  if (!cfg.pairingEnabled) return true;
+  return Boolean(token) && token === cfg.pairToken;
+}
+
+function serveStatic(req, res, urlObj) {
+  let rel = urlObj.pathname === '/' ? '/index.html' : urlObj.pathname;
+  rel = decodeURIComponent(rel);
+  if (rel.includes('..')) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+  const filePath = path.join(PUBLIC, rel);
+  if (!filePath.startsWith(PUBLIC)) {
+    res.writeHead(403);
+    res.end('Forbidden');
+    return;
+  }
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).isDirectory()) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
+  const ext = path.extname(filePath);
+  res.writeHead(200, { 'Content-Type': MIME[ext] || 'application/octet-stream' });
+  fs.createReadStream(filePath).pipe(res);
+}
+
+
+async function main() {
+  const cfg = loadConfig();
+  const port = Number(process.env.PORT) || cfg.port || DEFAULT_PORT;
+  const lan = getLanIPv4();
+  const pairUrl = `http://${lan.primary}:${port}/?token=${cfg.pairToken}`;
+  const wsUrl = `ws://${lan.primary}:${port}/ws?token=${cfg.pairToken}`;
+
+  const server = http.createServer(async (req, res) => {
+    try {
+      const urlObj = new URL(req.url || '/', `http://${req.headers.host || 'localhost'}`);
+      const cfgNow = loadConfig();
+
+      if (urlObj.pathname === '/api/health') {
+        sendJson(res, 200, { ok: true, service: 'codex-remote', port });
+        return;
+      }
+
+      if (urlObj.pathname === '/api/status') {
+        const token = extractToken(req, urlObj);
+        if (!tokenOk(cfgNow, token)) {
+          sendJson(res, 401, { ok: false, error: 'pairing_required' });
+          return;
+        }
+        sendJson(res, 200, {
+          ok: true,
+          lan,
+          port,
+          codex: getCodexStatus(),
+          pairingEnabled: cfgNow.pairingEnabled,
+        });
+        return;
+      }
+
+      if (urlObj.pathname === '/api/pair') {
+        const lanNow = getLanIPv4();
+        const pairNow = `http://${lanNow.primary}:${port}/?token=${cfgNow.pairToken}`;
+        const wsNow = `ws://${lanNow.primary}:${port}/ws?token=${cfgNow.pairToken}`;
+        sendJson(res, 200, {
+          ok: true,
+          port,
+          lan: lanNow,
+          pairUrl: pairNow,
+          wsUrl: wsNow,
+          token: cfgNow.pairToken,
+          qrText: pairNow,
+        });
+        return;
+      }
+
+      if (urlObj.pathname === '/api/qr.png') {
+        const lanNow = getLanIPv4();
+        const pairNow = `http://${lanNow.primary}:${port}/?token=${cfgNow.pairToken}`;
+        const png = await QRCode.toBuffer(pairNow, { type: 'png', width: 320, margin: 2 });
+        res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
+        res.end(png);
+        return;
+      }
+
+      if (urlObj.pathname === '/api/history' && req.method === 'DELETE') {
+        const token = extractToken(req, urlObj);
+        if (!tokenOk(cfgNow, token)) {
+          sendJson(res, 401, { ok: false, error: 'pairing_required' });
+          return;
+        }
+        clearHistory();
+        sendJson(res, 200, { ok: true });
+        return;
+      }
+
+      serveStatic(req, res, urlObj);
+    } catch (e) {
+      sendJson(res, 500, { ok: false, error: String(e && e.message ? e.message : e) });
+    }
+  });
+
+
+  const wss = new WebSocketServer({ server, path: '/ws' });
+
+  wss.on('connection', (socket, req) => {
+    const cfgNow = loadConfig();
+    const urlObj = new URL(req.url || '/ws', `http://${req.headers.host || 'localhost'}`);
+    const token = urlObj.searchParams.get('token') || '';
+    if (!tokenOk(cfgNow, token)) {
+      socket.send(JSON.stringify({ type: 'error', error: 'pairing_required', message: 'Invalid or missing pair token' }));
+      socket.close(1008, 'pairing_required');
+      return;
+    }
+
+    socket.send(JSON.stringify({
+      type: 'hello',
+      codex: getCodexStatus(),
+      lan: getLanIPv4(),
+      port,
+    }));
+
+    let busy = false;
+    let abortCtrl = null;
+
+    socket.on('message', async (raw) => {
+      let msg;
+      try { msg = JSON.parse(String(raw)); } catch {
+        socket.send(JSON.stringify({ type: 'error', error: 'bad_json' }));
+        return;
+      }
+
+      if (msg.type === 'ping') {
+        socket.send(JSON.stringify({ type: 'pong', t: Date.now() }));
+        return;
+      }
+
+      if (msg.type === 'clear') {
+        clearHistory();
+        socket.send(JSON.stringify({ type: 'cleared' }));
+        return;
+      }
+
+      if (msg.type === 'chat') {
+        const text = (msg.text || '').trim();
+        if (!text) {
+          socket.send(JSON.stringify({ type: 'error', error: 'empty' }));
+          return;
+        }
+        if (busy) {
+          socket.send(JSON.stringify({ type: 'error', error: 'busy' }));
+          return;
+        }
+        busy = true;
+        abortCtrl = new AbortController();
+        const id = msg.id || crypto.randomBytes(8).toString('hex');
+        socket.send(JSON.stringify({ type: 'chat_start', id }));
+        try {
+          const full = await runCodexTurn(text, {
+            signal: abortCtrl.signal,
+            onChunk: (chunk) => {
+              if (socket.readyState === 1) {
+                socket.send(JSON.stringify({ type: 'chat_chunk', id, chunk }));
+              }
+            },
+          });
+          socket.send(JSON.stringify({ type: 'chat_end', id, text: full }));
+        } catch (e) {
+          socket.send(JSON.stringify({
+            type: 'chat_error',
+            id,
+            code: e.code || 'ERROR',
+            message: e.message || String(e),
+          }));
+        } finally {
+          busy = false;
+          abortCtrl = null;
+        }
+        return;
+      }
+    });
+  });
+
+
+  server.on('error', (err) => {
+    console.error('Server error:', err.message);
+    process.exit(1);
+  });
+
+
+  server.listen(port, '0.0.0.0', async () => {
+    const status = getCodexStatus();
+    console.log('');
+    console.log('╔══════════════════════════════════════════╗');
+    console.log('║     编码遥控 CodexRemote daemon          ║');
+    console.log('╚══════════════════════════════════════════╝');
+    console.log(`LAN:    http://${lan.primary}:${port}`);
+    console.log(`Pair:   ${pairUrl}`);
+    console.log(`WS:     ${wsUrl}`);
+    console.log(`Config: ${CONFIG_FILE}`);
+    console.log(`Codex:  ${status.found ? status.path : 'NOT FOUND — daemon up; send will error with install hint'}`);
+    if (lan.all.length > 1) {
+      console.log('IPs:');
+      for (const a of lan.all) console.log(`  - ${a.address} (${a.kind}/${a.name})`);
+    }
+    console.log('');
+    try {
+      const qr = await QRCode.toString(pairUrl, { type: 'terminal', small: true });
+      console.log('Scan on phone (same LAN / Tailscale / tunnel):');
+      console.log(qr);
+    } catch (e) {
+      console.log('QR (text):', pairUrl);
+    }
+    console.log('Open pair page also at /api/pair  |  health: /api/health');
+    console.log('');
+  });
+}
+
+main().catch((e) => {
+  console.error(e);
+  process.exit(1);
+});

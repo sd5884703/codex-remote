@@ -1,0 +1,84 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1419" />
+  <title>联网设置 · 编码遥控</title>
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="manifest" href="./manifest.webmanifest" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1 data-i18n="wizardTitle">远程访问向导</h1>
+      <div class="sub" data-i18n="appName">编码遥控</div>
+    </div>
+    <nav>
+      <button type="button" id="btnLang">EN</button>
+      <a class="btn" href="./index.html" data-i18n="back">返回对话</a>
+    </nav>
+  </header>
+  <main id="wizardRoot" style="overflow:auto">
+    <section class="panel">
+      <h2 data-i18n="lanTitle">默认：局域网</h2>
+      <p data-i18n="lanBody">手机与 Mac 同一 Wi‑Fi，扫描终端二维码即可。无需公网 IP。</p>
+    </section>
+  </main>
+  <script type="module">
+    import { getLang, setLang, applyI18n, t } from './i18n.js';
+    import { WIZARD } from './wizard.js';
+
+    function panel(title, prosLabel, consLabel, stepsLabel, data) {
+      const sec = document.createElement('section');
+      sec.className = 'panel';
+      const h2 = document.createElement('h2');
+      h2.textContent = title;
+      sec.appendChild(h2);
+      const hPros = document.createElement('h3');
+      hPros.textContent = prosLabel;
+      sec.appendChild(hPros);
+      const ulP = document.createElement('ul');
+      (data.pros || []).forEach((x) => { const li = document.createElement('li'); li.textContent = x; ulP.appendChild(li); });
+      sec.appendChild(ulP);
+      const hCons = document.createElement('h3');
+      hCons.textContent = consLabel;
+      sec.appendChild(hCons);
+      const ulC = document.createElement('ul');
+      (data.cons || []).forEach((x) => { const li = document.createElement('li'); li.textContent = x; ulC.appendChild(li); });
+      sec.appendChild(ulC);
+      const hSteps = document.createElement('h3');
+      hSteps.textContent = stepsLabel;
+      sec.appendChild(hSteps);
+      const ol = document.createElement('ol');
+      (data.steps || []).forEach((x) => { const li = document.createElement('li'); li.textContent = x; ol.appendChild(li); });
+      sec.appendChild(ol);
+      return sec;
+    }
+
+    function render() {
+      const lang = getLang();
+      const w = WIZARD[lang] || WIZARD.zh;
+      const root = document.getElementById('wizardRoot');
+      root.querySelectorAll('[data-dyn]').forEach((n) => n.remove());
+      const pros = t('pros');
+      const cons = t('cons');
+      const steps = t('steps');
+      const ts = panel(w.tsTitle, pros, cons, steps, { pros: w.tsPros, cons: w.tsCons, steps: w.tsSteps });
+      ts.setAttribute('data-dyn', '1');
+      const cf = panel(w.cfTitle, pros, cons, steps, { pros: w.cfPros, cons: w.cfCons, steps: w.cfSteps });
+      cf.setAttribute('data-dyn', '1');
+      root.appendChild(ts);
+      root.appendChild(cf);
+      document.getElementById('btnLang').textContent = lang === 'zh' ? 'EN' : '中文';
+      applyI18n();
+    }
+
+    document.getElementById('btnLang').onclick = () => {
+      setLang(getLang() === 'zh' ? 'en' : 'zh');
+      render();
+    };
+    render();
+  </script>
+</body>
+</html>

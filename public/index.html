@@ -1,0 +1,64 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0f1419" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <title>编码遥控 CodexRemote</title>
+  <link rel="manifest" href="./manifest.webmanifest" />
+  <link rel="stylesheet" href="./style.css" />
+  <link rel="icon" href="./icon.svg" type="image/svg+xml" />
+</head>
+<body>
+  <header>
+    <div>
+      <h1 data-i18n="appName">编码遥控</h1>
+      <div class="sub" data-i18n="tagline">手机 ↔ Mac 本地 Codex</div>
+    </div>
+    <nav>
+      <button type="button" id="btnLang">EN</button>
+      <a class="btn" href="./setup.html" data-i18n="setup">联网设置</a>
+    </nav>
+  </header>
+
+  <details class="conn" open>
+    <summary>
+      <span id="statusDot"></span><span id="connLabel" data-i18n="disconnected">未连接</span>
+      · <span id="codexStatus" class="hint"></span>
+    </summary>
+    <div class="panel" style="margin:8px 0 0">
+      <label class="hint" data-i18n="serverUrl">服务器地址</label>
+      <input id="serverUrl" type="url" autocomplete="off" />
+      <label class="hint" data-i18n="pairToken">配对令牌</label>
+      <input id="pairToken" type="password" autocomplete="off" />
+      <div class="row" style="margin-top:10px">
+        <button type="button" class="primary" id="btnConnect" data-i18n="connect">连接</button>
+        <button type="button" id="btnSave" data-i18n="save">保存</button>
+        <button type="button" id="btnCopy" data-i18n="copyLink">复制配对链接</button>
+        <button type="button" class="danger" id="btnClear" data-i18n="clear">清空会话</button>
+      </div>
+      <p class="hint" data-i18n="pairHint">在 Mac 终端查看配对 URL / 二维码</p>
+      <p class="hint" data-i18n="scanQr">配对二维码</p>
+      <img id="qrImg" class="qr" alt="QR" />
+      <p class="hint" data-i18n="installPwa">可添加到主屏幕</p>
+    </div>
+  </details>
+
+  <main id="messages" aria-live="polite"></main>
+
+  <div class="composer">
+    <p id="listenHint" class="hint" hidden data-i18n="listening">正在听…</p>
+    <p id="streamHint" class="hint" hidden data-i18n="streaming">Codex 输出中…</p>
+    <textarea id="draft" data-i18n-placeholder="draft" placeholder="输入消息…"></textarea>
+    <div class="row">
+      <button type="button" id="micBtn" data-i18n="holdMic">按住说话</button>
+      <button type="button" class="primary" id="btnSend" style="flex:1" data-i18n="send">发送</button>
+    </div>
+    <p class="hint" data-i18n="releaseEdit">松开后可编辑再发送</p>
+  </div>
+
+  <script type="module" src="./app.js"></script>
+</body>
+</html>
