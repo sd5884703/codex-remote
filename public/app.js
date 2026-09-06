@@ -38,6 +38,16 @@ function setConnected(on) {
   $('btnConnect').textContent = on ? t('disconnect') : t('connect');
 }
 
+function redactUrl(u) {
+  try {
+    const x = new URL(u, location.origin);
+    if (x.searchParams.has('token')) x.searchParams.set('token', '***');
+    return x.toString();
+  } catch {
+    return String(u).replace(/([?&]token=)[^&]*/gi, '$1***');
+  }
+}
+
 function addMsg(role, text) {
   const el = document.createElement('div');
   el.className = `msg ${role}`;
@@ -67,7 +77,7 @@ function connect() {
   const httpUrl = localStorage.getItem(LS_URL) || defaultServerUrl();
   const token = localStorage.getItem(LS_TOKEN) || '';
   const url = wsUrlFromHttp(httpUrl, token);
-  addMsg('system', url);
+  addMsg('system', redactUrl(url));
   ws = new WebSocket(url);
   ws.onopen = () => setConnected(true);
   ws.onclose = () => setConnected(false);
@@ -222,7 +232,7 @@ function init() {
       await navigator.clipboard.writeText(link);
       addMsg('system', t('copied'));
     } catch {
-      addMsg('system', link);
+      addMsg('system', redactUrl(link));
     }
   };
   $('draft').addEventListener('keydown', (e) => {
