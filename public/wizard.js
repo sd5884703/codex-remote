@@ -68,7 +68,7 @@ export const WIZARD = {
       '记下电脑的 Tailscale 地址（以 100. 开头的 IP，或魔术域名）。手机要保存的是这个，不是家里 Wi-Fi 的 192.168 地址。',
       '下一步再安装「登录后自动启动」（先装好 Tailscale 再开服务）。会创建用户级计划任务（Scheduled Task），并允许经 Tailscale 访问本机端口。',
     ],
-    detectOk: '已检测到本机可能已安装 Tailscale 或已有Tailscale IP。',
+    detectOk: '已检测到本机可能已安装 Tailscale 或已有 Tailscale IP。',
     detectNo: '尚未检测到 Tailscale。请先安装并登录，再点「我已装好，下一步」。',
     nextBtn: '我已装好，下一步',
     alwaysOnTitle: '登录后自动启动',
