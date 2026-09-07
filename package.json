@@ -7,7 +7,9 @@
   "scripts": {
     "start": "node daemon/index.js",
     "dev": "node --watch daemon/index.js",
-    "start:stub": "CODEX_REMOTE_STUB=1 node daemon/index.js"
+    "start:stub": "CODEX_REMOTE_STUB=1 node daemon/index.js",
+    "install:always-on": "bash scripts/install-launch-agent.sh",
+    "uninstall:always-on": "bash scripts/uninstall-launch-agent.sh"
   },
   "engines": {
     "node": ">=18"
