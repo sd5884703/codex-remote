@@ -11,6 +11,22 @@ WRAPPER="${CONFIG_DIR}/keepalive-wrapper.sh"
 DAEMON_JS="${ROOT}/daemon/index.js"
 PATCH_JS="${SCRIPT_DIR}/patch-expose-lan.mjs"
 
+stop_keepalive() {
+  local old=""
+  if [[ -f "$PIDFILE" ]]; then
+    old="$(cat "$PIDFILE" 2>/dev/null || true)"
+  fi
+  if [[ -n "${old}" ]]; then
+    kill -TERM -"$old" 2>/dev/null || kill -TERM "$old" 2>/dev/null || true
+    sleep 1
+    kill -KILL -"$old" 2>/dev/null || kill -KILL "$old" 2>/dev/null || true
+  fi
+  if command -v pkill >/dev/null 2>&1; then
+    pkill -f "${DAEMON_JS}" 2>/dev/null || true
+  fi
+  rm -f "$PIDFILE"
+}
+
 if [[ "$(uname -s)" == "Darwin" ]]; then
   echo "Mac: use launchd path instead."
   exit 1
@@ -28,28 +44,37 @@ mkdir -p "$CONFIG_DIR"
 chmod 700 "$CONFIG_DIR" 2>/dev/null || true
 "$NODE_BIN" "$PATCH_JS"
 
-if [[ -f "$PIDFILE" ]]; then
-  old="$(cat "$PIDFILE" 2>/dev/null || true)"
-  if [[ -n "${old}" ]] && kill -0 "$old" 2>/dev/null; then
-    kill "$old" 2>/dev/null || true
-    sleep 1
-    kill -9 "$old" 2>/dev/null || true
-  fi
-  rm -f "$PIDFILE"
-fi
+stop_keepalive
 
-{
-  echo "#!/usr/bin/env bash"
-  echo "cd \"$ROOT\""
-  echo "while true; do"
-  echo "  \"$NODE_BIN\" \"$DAEMON_JS\" >>\"$LOG\" 2>&1 || true"
-  echo "  echo \"\$(date -u +%Y-%m-%dT%H:%M:%SZ) daemon exited; restart in 3s\" >>\"$LOG\""
-  echo "  sleep 3"
-  echo "done"
-} > "$WRAPPER"
+cat > "$WRAPPER" <<EOF
+#!/usr/bin/env bash
+set -euo pipefail
+cd "$ROOT"
+child=""
+cleanup() {
+  if [[ -n "\$child" ]]; then
+    kill -TERM "\$child" 2>/dev/null || true
+    sleep 1
+    kill -KILL "\$child" 2>/dev/null || true
+  fi
+}
+trap cleanup EXIT TERM INT
+while true; do
+  "$NODE_BIN" "$DAEMON_JS" >>"$LOG" 2>&1 &
+  child=\$!
+  wait "\$child" || true
+  child=""
+  echo "\$(date -u +%Y-%m-%dT%H:%M:%SZ) daemon exited; restart in 3s" >>"$LOG"
+  sleep 3
+done
+EOF
 chmod +x "$WRAPPER"
 
-nohup "$WRAPPER" >/dev/null 2>&1 &
+if command -v setsid >/dev/null 2>&1; then
+  setsid "$WRAPPER" >/dev/null 2>&1 &
+else
+  nohup "$WRAPPER" >/dev/null 2>&1 &
+fi
 echo $! > "$PIDFILE"
 sleep 1
 if kill -0 "$(cat "$PIDFILE")" 2>/dev/null; then
