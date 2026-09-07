@@ -86,6 +86,16 @@ let resolveTried = false;
 function findCodexBinary() {
   if (resolveTried) return resolvedCodex;
   resolveTried = true;
+  const stubPath = path.join(ROOT, 'scripts', 'codex-stub.mjs');
+  if (process.env.CODEX_REMOTE_STUB === '1' && fs.existsSync(stubPath)) {
+    resolvedCodex = stubPath;
+    return resolvedCodex;
+  }
+  const envBin = (process.env.CODEX_BIN || '').trim();
+  if (envBin && fs.existsSync(envBin)) {
+    resolvedCodex = envBin;
+    return resolvedCodex;
+  }
   for (const candidate of CODEX_CANDIDATES) {
     if (!candidate) continue;
     try {
@@ -112,7 +122,8 @@ function getCodexStatus() {
   const bin = findCodexBinary();
   const hintZh = '未找到本地 codex CLI。请安装并确保在 PATH 中。';
   const hintEn = 'Codex CLI not found. Install it and ensure it is on PATH.';
-  return { found: Boolean(bin), path: bin, hint: bin ? null : hintZh + ' / ' + hintEn };
+  const stub = Boolean(bin && String(bin).includes('codex-stub'));
+  return { found: Boolean(bin), path: bin, stub, hint: bin ? null : hintZh + ' / ' + hintEn };
 }
 
 function loadHistory() {
