@@ -82,6 +82,20 @@ const CODEX_CANDIDATES = [
 let resolvedCodex = null;
 let resolveTried = false;
 
+function isNodeScript(bin) {
+  return /\.(mjs|cjs|js)$/i.test(String(bin || ''));
+}
+
+function spawnCli(bin, args, opts) {
+  if (isNodeScript(bin)) return runChild(process.execPath, [bin, ...args], opts);
+  return runChild(bin, args, opts);
+}
+
+function spawnSyncCli(bin, args, opts) {
+  if (isNodeScript(bin)) return runSync(process.execPath, [bin, ...args], opts);
+  return runSync(bin, args, opts);
+}
+
 
 function findCodexBinary() {
   if (resolveTried) return resolvedCodex;
@@ -100,7 +114,7 @@ function findCodexBinary() {
     if (!candidate) continue;
     try {
       if (candidate.includes('/') && !fs.existsSync(candidate)) continue;
-      const r = runSync(candidate, ['--version'], { encoding: 'utf8', timeout: 8000, env: process.env });
+      const r = spawnSyncCli(candidate, ['--version'], { encoding: 'utf8', timeout: 8000, env: process.env });
       if (r.error || r.status === 127) continue;
       resolvedCodex = candidate;
       return resolvedCodex;
@@ -185,7 +199,7 @@ function runCodexTurn(userText, { onChunk, signal } = {}) {
       const args = argsCandidates[attempt++];
       full = '';
       stderr = '';
-      const child = runChild(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
+      const child = spawnCli(bin, args, { env: process.env, stdio: ['ignore', 'pipe', 'pipe'] });
       const onAbort = () => { try { child.kill('SIGTERM'); } catch { /* ignore */ } };
       if (signal) {
         if (signal.aborted) onAbort();
