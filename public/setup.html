@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0f1419" />
-  <title>出门通道向导 · 编码遥控</title>
+  <title>设置向导 · 编码遥控</title>
   <link rel="stylesheet" href="./style.css" />
   <link rel="manifest" href="./manifest.webmanifest" />
 </head>
 <body>
   <header>
     <div>
-      <h1 data-i18n="wizardTitle">出门通道向导</h1>
+      <h1 data-i18n="wizardTitle">设置向导</h1>
       <div class="sub" data-i18n="appName">编码遥控</div>
     </div>
     <nav>
@@ -164,7 +164,7 @@
           text: tsOk ? data.detectOk : data.detectNo,
         }),
         netinfo && netinfo.meshAddress
-          ? el('p', { text: '组网地址：' + netinfo.meshAddress + (netinfo.magicDns ? ' / ' + netinfo.magicDns : '') })
+          ? el('p', { text: 'Tailscale 地址：' + netinfo.meshAddress + (netinfo.magicDns ? ' / ' + netinfo.magicDns : '') })
           : null,
         el('p', {}, [
           el('a', {
@@ -194,7 +194,7 @@
         el('p', { text: data.alwaysOnBody }),
         data.meshFirstNote ? el('p', { className: 'hint', text: data.meshFirstNote }) : null,
         data.sleepWarn ? el('p', { className: 'hint', style: 'color:#fecaca', text: data.sleepWarn }) : null,
-        el('p', { className: 'hint', text: on ? '当前：常开已安装' : '当前：常开未安装' }),
+        el('p', { className: 'hint', text: on ? '当前：自动启动已安装' : '当前：自动启动未安装' }),
         el('p', { className: 'hint', text: data.alwaysOnCmd }),
         el('div', { className: 'row', style: 'margin-top:12px;flex-wrap:wrap' }, [
           el('button', {
@@ -206,7 +206,7 @@
                 lastMsg = '安装中…';
                 render();
                 const j = await postAlwaysOn('install');
-                lastMsg = j.message || '常开已安装';
+                lastMsg = j.message || '自动启动已安装';
                 await fetchNetinfo();
               } catch (e) {
                 lastMsg = '安装失败：' + e.message + '。也可在电脑项目目录运行 npm run install:always-on';
@@ -221,7 +221,7 @@
             onClick: async () => {
               try {
                 const j = await postAlwaysOn('uninstall');
-                lastMsg = j.message || '常开已卸载';
+                lastMsg = j.message || '自动启动已卸载';
                 await fetchNetinfo();
               } catch (e) {
                 lastMsg = '卸载失败：' + e.message + '。也可运行 npm run uninstall:always-on';
@@ -249,15 +249,15 @@
       const port = (netinfo && netinfo.port) || 8787;
       const lines = [];
       if (enableTs) {
-        lines.push('已选择：启用出门通道（私人组网 / Tailscale）。');
+        lines.push('已选择：启用外出访问（Tailscale）。');
       } else {
         lines.push(data.skipWarn);
       }
-      lines.push(on ? '登录后常开：已安装。' : '登录后常开：未安装（可稍后 npm run install:always-on）。');
+      lines.push(on ? '登录后自动启动：已安装。' : '登录后自动启动：未安装（可稍后 npm run install:always-on）。');
       if (mesh) {
-        lines.push('手机应保存的稳定地址：http://' + mesh + ':' + port + '（组网地址，不是家里 Wi-Fi）。');
+        lines.push('手机应保存的稳定地址：http://' + mesh + ':' + port + '（Tailscale 地址，不是家里 Wi-Fi）。');
       } else if (enableTs) {
-        lines.push(data.summaryNoMesh || '尚未读到组网地址：请在电脑 Tailscale 查看后手动填写稳定地址，或刷新本页。');
+        lines.push(data.summaryNoMesh || '尚未读到Tailscale 地址：请在电脑 Tailscale 查看后手动填写稳定地址，或刷新本页。');
       }
       lines.push('配对令牌：沿用用户目录下 `.codex-remote` 配置文件里的配对令牌（终端里的配对链接里也有）。');
       if (data.sleepWarn) lines.push(data.sleepWarn);
