@@ -11,7 +11,7 @@ export const WIZARD = {
       'On Mac: install Tailscale from the official download site or App Store, open it, sign in.',
       'On phone: install Tailscale, sign in with the SAME account.',
       'Confirm both devices show as Connected / Online in the Tailscale app.',
-      'Note the Mac mesh address (100.x IP or MagicDNS name) — that is what the phone saves, not home Wi-Fi IP.',
+      'Note this computer's mesh address (100.x IP or MagicDNS name) — that is what the phone saves, not home Wi-Fi IP.',
       'Next: install always-on after mesh (mesh first, then service) so Tailscale can reach the port.',
     ],
     tsStepsWin: [
@@ -58,7 +58,7 @@ export const WIZARD = {
       '在 Mac 上：打开官方下载页或 App Store 安装 Tailscale，打开应用并登录。',
       '在手机上：安装 Tailscale，用【同一个账号】登录。',
       '确认两端在 Tailscale 应用里都显示已连接 / 在线。',
-      '记下 Mac 的组网地址（以 100. 开头的 IP，或魔术 DNS 名称）——手机要保存的是这个，不是家里 Wi-Fi 的 192.168 地址。',
+      '记下本机的组网地址（以 100. 开头的 IP，或魔术 DNS 名称）——手机要保存的是这个，不是家里 Wi-Fi 的 192.168 地址。',
       '下一步再安装「登录后常开」（先组网再开服务），并允许组网访问本机端口。',
     ],
     tsStepsWin: [
@@ -105,7 +105,7 @@ export function wizardFor(lang, platform) {
     base.tsSteps = base.tsStepsWin || base.tsStepsMac;
     base.alwaysOnBody = base.alwaysOnBodyWin || base.alwaysOnBodyMac;
   } else if (plat === 'linux') {
-    base.tsSteps = base.tsStepsMac;
+    base.tsSteps = base.tsStepsWin || base.tsStepsMac;
     base.alwaysOnBody = base.alwaysOnBodyLinux || base.alwaysOnBodyMac;
   } else {
     base.tsSteps = base.tsStepsMac;
