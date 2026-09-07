@@ -2,7 +2,7 @@
 export const STRINGS = {
   zh: {
     appName: '编码遥控',
-    tagline: '手机 ↔ Mac 本地 Codex',
+    tagline: '手机 ↔ 电脑本地 Codex',
     chat: '对话',
     setup: '联网设置',
     lang: '语言',
@@ -45,13 +45,13 @@ export const STRINGS = {
     fillMesh: '填入出门地址',
     meshFilled: '已保存出门（组网）地址',
     meshMissing: '尚未检测到组网地址，请先在 Mac 完成私人组网（Tailscale）',
-    errServiceDown: '服务未开：电脑上的编码遥控还没运行。请在 Mac 执行 npm start，或确认已安装「登录后常开」。',
-    errMeshOffline: '组网未在线：私人组网（Tailscale）可能未连接。请在手机与 Mac 上打开 Tailscale，确认两端在线后重试。',
+    errServiceDown: '服务未开：电脑上的编码遥控还没运行。请在电脑执行 npm start，或确认已安装「登录后常开」。',
+    errMeshOffline: '组网未在线：私人组网（Tailscale）可能未连接。请在手机与电脑上打开 Tailscale，确认两端在线后重试。',
     errBadAddrOrKey: '地址或钥匙不对：请检查服务器地址（应为组网 100.x / 魔术 DNS，不是家里 Wi-Fi）与配对令牌是否一致。',
   },
   en: {
     appName: 'CodexRemote',
-    tagline: 'Phone ↔ Mac local Codex',
+    tagline: 'Phone ↔ computer local Codex',
     chat: 'Chat',
     setup: 'Remote setup',
     lang: 'Lang',
@@ -94,8 +94,8 @@ export const STRINGS = {
     fillMesh: 'Fill going-out address',
     meshFilled: 'Saved going-out (mesh) address',
     meshMissing: 'No mesh address detected yet. Finish private mesh (Tailscale) on the Mac first.',
-    errServiceDown: 'Service not running: CodexRemote is not up on the Mac. Run npm start, or install always-on after login.',
-    errMeshOffline: 'Mesh offline: private mesh (Tailscale) may be disconnected. Open Tailscale on phone and Mac, confirm both online, then retry.',
+    errServiceDown: 'Service not running: CodexRemote is not up on the computer. Run npm start, or install always-on after login.',
+    errMeshOffline: 'Mesh offline: private mesh (Tailscale) may be disconnected. Open Tailscale on phone and computer, confirm both online, then retry.',
     errBadAddrOrKey: 'Wrong address or key: check server URL (mesh 100.x / MagicDNS, not home Wi-Fi) and pair token.',
   },
 };

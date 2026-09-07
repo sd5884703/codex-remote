@@ -22,7 +22,7 @@
   <main id="wizardRoot" style="overflow:auto"></main>
   <script type="module">
     import { getLang, setLang, applyI18n, t } from './i18n.js';
-    import { WIZARD } from './wizard.js';
+    import { WIZARD, wizardFor } from './wizard.js';
 
     const LS_URL = 'codex-remote-server-url';
     const LS_TOKEN = 'codex-remote-token';
@@ -39,18 +39,23 @@
     let enableTs = loadWizardState().enableTs !== false;
     let checks = loadWizardState().checks || {};
     let netinfo = null;
+    let hostPlatform = 'darwin';
     let lastMsg = '';
 
     async function fetchNetinfo() {
       try {
         const r = await fetch('/api/netinfo', { cache: 'no-store' });
-        if (r.ok) netinfo = await r.json();
+        if (r.ok) {
+          netinfo = await r.json();
+          if (netinfo && netinfo.platform) hostPlatform = netinfo.platform;
+          else if (netinfo && netinfo.alwaysOn && netinfo.alwaysOn.platform) hostPlatform = netinfo.alwaysOn.platform;
+        }
       } catch { netinfo = null; }
     }
 
     function w() {
       const lang = getLang();
-      return WIZARD[lang] || WIZARD.zh;
+      return wizardFor(lang, hostPlatform);
     }
 
     function el(tag, attrs, kids) {
@@ -152,6 +157,7 @@
       root.appendChild(el('section', { className: 'panel' }, [
         el('h2', { text: data.tsTitle }),
         el('p', { text: data.tsIntro }),
+        data.meshFirstNote ? el('p', { className: 'hint', text: data.meshFirstNote }) : null,
         el('p', {
           className: 'hint',
           style: tsOk ? 'color:#86efac' : '',
@@ -186,6 +192,8 @@
       root.appendChild(el('section', { className: 'panel' }, [
         el('h2', { text: data.alwaysOnTitle }),
         el('p', { text: data.alwaysOnBody }),
+        data.meshFirstNote ? el('p', { className: 'hint', text: data.meshFirstNote }) : null,
+        data.sleepWarn ? el('p', { className: 'hint', style: 'color:#fecaca', text: data.sleepWarn }) : null,
         el('p', { className: 'hint', text: on ? '当前：常开已安装' : '当前：常开未安装' }),
         el('p', { className: 'hint', text: data.alwaysOnCmd }),
         el('div', { className: 'row', style: 'margin-top:12px;flex-wrap:wrap' }, [
@@ -201,7 +209,7 @@
                 lastMsg = j.message || '常开已安装';
                 await fetchNetinfo();
               } catch (e) {
-                lastMsg = '安装失败：' + e.message + '。也可在 Mac 终端运行 npm run install:always-on';
+                lastMsg = '安装失败：' + e.message + '。也可在电脑项目目录运行 npm run install:always-on';
               }
               render();
             },
@@ -252,6 +260,8 @@
         lines.push('尚未读到组网地址：请确认 Mac 上私人组网（Tailscale）已登录在线后刷新本页。');
       }
       lines.push('配对钥匙：沿用 ~/.codex-remote/config.json 中的 pairToken（终端 Pair 链接里也有）。');
+      if (data.sleepWarn) lines.push(data.sleepWarn);
+      lines.push('本机平台：' + hostPlatform + (netinfo && netinfo.alwaysOn && netinfo.alwaysOn.method ? ' / ' + netinfo.alwaysOn.method : ''));
 
       root.appendChild(el('section', { className: 'panel' }, [
         el('h2', { text: data.summaryTitle }),

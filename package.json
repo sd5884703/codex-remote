@@ -8,8 +8,8 @@
     "start": "node daemon/index.js",
     "dev": "node --watch daemon/index.js",
     "start:stub": "CODEX_REMOTE_STUB=1 node daemon/index.js",
-    "install:always-on": "bash scripts/install-launch-agent.sh",
-    "uninstall:always-on": "bash scripts/uninstall-launch-agent.sh"
+    "install:always-on": "node scripts/always-on.js install",
+    "uninstall:always-on": "node scripts/always-on.js uninstall"
   },
   "engines": {
     "node": ">=18"

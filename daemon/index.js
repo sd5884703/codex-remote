@@ -19,6 +19,8 @@ const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const HISTORY_FILE = path.join(CONFIG_DIR, 'history.jsonl');
 const LAUNCH_LABEL = 'com.codexremote.daemon';
 const LAUNCH_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', `${LAUNCH_LABEL}.plist`);
+const WIN_TASK_NAME = 'CodexRemoteDaemon';
+const LINUX_PIDFILE = path.join(CONFIG_DIR, 'keepalive.pid');
 
 function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
@@ -81,9 +83,11 @@ function getLanIPv4() {
 function findTailscaleBin() {
   const candidates = [
     'tailscale',
+    'tailscale.exe',
     '/usr/local/bin/tailscale',
     '/opt/homebrew/bin/tailscale',
     '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
+    'C:\\Program Files\\Tailscale\\tailscale.exe',
   ];
   for (const c of candidates) {
     try {
@@ -135,22 +139,106 @@ function detectTailscale() {
 }
 
 function alwaysOnStatus() {
-  const installed = fs.existsSync(LAUNCH_PLIST);
-  return { installed, plist: installed ? LAUNCH_PLIST : null, label: LAUNCH_LABEL };
+  const platform = process.platform;
+  if (platform === 'darwin') {
+    const installed = fs.existsSync(LAUNCH_PLIST);
+    return {
+      installed,
+      platform,
+      method: 'launchd',
+      plist: installed ? LAUNCH_PLIST : null,
+      label: LAUNCH_LABEL,
+    };
+  }
+  if (platform === 'win32') {
+    let installed = false;
+    try {
+      const r = runSync('schtasks', ['/Query', '/TN', WIN_TASK_NAME], {
+        encoding: 'utf8',
+        timeout: 8000,
+        windowsHide: true,
+      });
+      installed = r.status === 0;
+    } catch { installed = false; }
+    return {
+      installed,
+      platform,
+      method: 'schtasks',
+      taskName: WIN_TASK_NAME,
+    };
+  }
+  // linux (and other): box QA keepalive
+  let installed = false;
+  let pid = null;
+  if (fs.existsSync(LINUX_PIDFILE)) {
+    try {
+      pid = parseInt(String(fs.readFileSync(LINUX_PIDFILE, 'utf8')).trim(), 10);
+      if (Number.isFinite(pid)) {
+        try { process.kill(pid, 0); installed = true; } catch { installed = false; }
+      }
+    } catch { installed = false; }
+  }
+  return {
+    installed,
+    platform: platform === 'linux' ? 'linux' : platform,
+    method: 'keepalive',
+    pidfile: LINUX_PIDFILE,
+    pid: installed ? pid : null,
+  };
 }
 
 function runAlwaysOnScript(action) {
-  const script = path.join(
-    ROOT,
-    'scripts',
-    action === 'uninstall' ? 'uninstall-launch-agent.sh' : 'install-launch-agent.sh',
-  );
-  if (!fs.existsSync(script)) {
-    const err = new Error(`script missing: ${script}`);
-    err.code = 'SCRIPT_MISSING';
-    throw err;
+  const platform = process.platform;
+  let cmd;
+  let args;
+  if (platform === 'darwin') {
+    const script = path.join(
+      ROOT,
+      'scripts',
+      action === 'uninstall' ? 'uninstall-launch-agent.sh' : 'install-launch-agent.sh',
+    );
+    if (!fs.existsSync(script)) {
+      const err = new Error(`script missing: ${script}`);
+      err.code = 'SCRIPT_MISSING';
+      throw err;
+    }
+    cmd = 'bash';
+    args = [script];
+  } else if (platform === 'win32') {
+    const script = path.join(
+      ROOT,
+      'scripts',
+      'windows',
+      action === 'uninstall' ? 'uninstall-scheduled-task.ps1' : 'install-scheduled-task.ps1',
+    );
+    if (!fs.existsSync(script)) {
+      const err = new Error(`script missing: ${script}`);
+      err.code = 'SCRIPT_MISSING';
+      throw err;
+    }
+    cmd = 'powershell';
+    args = ['-NoProfile', '-ExecutionPolicy', 'Bypass', '-File', script];
+  } else {
+    const script = path.join(
+      ROOT,
+      'scripts',
+      action === 'uninstall' ? 'uninstall-keepalive-linux.sh' : 'install-keepalive-linux.sh',
+    );
+    if (!fs.existsSync(script)) {
+      const err = new Error(`script missing: ${script}`);
+      err.code = 'SCRIPT_MISSING';
+      throw err;
+    }
+    cmd = 'bash';
+    args = [script];
   }
-  const r = runSync('bash', [script], { encoding: 'utf8', timeout: 60000, env: process.env, cwd: ROOT });
+  const r = runSync(cmd, args, {
+    encoding: 'utf8',
+    timeout: 60000,
+    env: process.env,
+    cwd: ROOT,
+    windowsHide: true,
+  });
   return {
     ok: r.status === 0,
     status: r.status,
@@ -418,6 +506,7 @@ async function main() {
         sendJson(res, 200, {
           ok: true,
           port,
+          platform: process.platform,
           exposeLan: Boolean(cfgNow.exposeLan),
           listenHost: cfgNow.listenHost || (cfgNow.exposeLan ? '0.0.0.0' : '127.0.0.1'),
           lan: nets,
