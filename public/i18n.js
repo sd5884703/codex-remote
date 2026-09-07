@@ -47,7 +47,7 @@ export const STRINGS = {
     meshMissing: '尚未检测到组网地址。请在电脑完成私人组网（Tailscale）后刷新，或手动填写稳定地址（100.x / 魔术 DNS）',
     errServiceDown: '服务未开：电脑上的编码遥控还没运行。请在电脑执行 npm start，或确认已安装「登录后常开」。',
     errMeshOffline: '组网未在线：私人组网（Tailscale）可能未连接。请在手机与电脑上打开 Tailscale，确认两端在线后重试。',
-    errBadAddrOrKey: '地址或钥匙不对：请检查服务器地址（应为组网 100.x / 魔术 DNS，不是家里 Wi-Fi）与配对令牌是否一致。',
+    errBadAddrOrKey: '地址或配对令牌不对：请检查服务器地址（应为组网 100.x / 魔术 DNS，不是家里 Wi-Fi）与配对令牌是否一致。',
   },
   en: {
     appName: 'CodexRemote',
