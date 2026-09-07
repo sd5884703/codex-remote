@@ -66,6 +66,30 @@ function wsUrlFromHttp(httpUrl, token) {
   return u.toString();
 }
 
+function isMeshHost(hostname) {
+  return /^100\.\d+\.\d+\.\d+$/.test(hostname) || /\.ts\.net$/i.test(hostname);
+}
+
+async function classifyConnectFailure(httpUrl) {
+  let host = '';
+  try { host = new URL(httpUrl).hostname; } catch { host = ''; }
+  const mesh = isMeshHost(host);
+
+  // Same-origin health: if we are already served by the daemon, service is up.
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 2500);
+    const r = await fetch(`${httpUrl.replace(/\/$/, '')}/api/health`, { signal: ctrl.signal, cache: 'no-store' });
+    clearTimeout(timer);
+    if (r.ok) return t('errBadAddrOrKey');
+  } catch {
+    /* fall through */
+  }
+
+  if (mesh) return `${t('errServiceDown')}\n${t('errMeshOffline')}`;
+  return t('errServiceDown');
+}
+
 function connect() {
   if (ws && (ws.readyState === WebSocket.OPEN || ws.readyState === WebSocket.CONNECTING)) {
     ws.close();
@@ -76,12 +100,26 @@ function connect() {
   saveConn();
   const httpUrl = localStorage.getItem(LS_URL) || defaultServerUrl();
   const token = localStorage.getItem(LS_TOKEN) || '';
+  if (!token) {
+    addMsg('system', t('pairingRequired'));
+    addMsg('system', t('errBadAddrOrKey'));
+  }
   const url = wsUrlFromHttp(httpUrl, token);
   addMsg('system', redactUrl(url));
   ws = new WebSocket(url);
-  ws.onopen = () => setConnected(true);
-  ws.onclose = () => setConnected(false);
-  ws.onerror = () => addMsg('system', t('error') + ': WebSocket');
+  let opened = false;
+  ws.onopen = () => { opened = true; setConnected(true); };
+  ws.onclose = async (ev) => {
+    setConnected(false);
+    if (!opened) {
+      const hint = await classifyConnectFailure(httpUrl);
+      addMsg('system', hint);
+      if (ev.code === 1008) addMsg('system', t('errBadAddrOrKey'));
+    }
+  };
+  ws.onerror = () => {
+    /* onclose will classify */
+  };
   let streamEl = null;
   ws.onmessage = (ev) => {
     let msg;
@@ -120,7 +158,10 @@ function connect() {
     }
     if (msg.type === 'error') {
       addMsg('system', `${t('error')}: ${msg.message || msg.error}`);
-      if (msg.error === 'pairing_required') addMsg('system', t('pairingRequired'));
+      if (msg.error === 'pairing_required') {
+        addMsg('system', t('pairingRequired'));
+        addMsg('system', t('errBadAddrOrKey'));
+      }
     }
     if (msg.type === 'cleared') addMsg('system', t('clear'));
   };
@@ -207,6 +248,27 @@ function refreshQr() {
   img.src = `${base}/api/qr.png?token=${encodeURIComponent(token)}&t=${Date.now()}`;
 }
 
+async function fillMeshAddress() {
+  try {
+    const r = await fetch('/api/netinfo', { cache: 'no-store' });
+    if (!r.ok) throw new Error('netinfo');
+    const info = await r.json();
+    const mesh = info.meshAddress || (info.tailscale && info.tailscale.ip);
+    const port = info.port || 8787;
+    if (!mesh) {
+      addMsg('system', t('meshMissing'));
+      return;
+    }
+    const url = `http://${mesh}:${port}`;
+    $('serverUrl').value = url;
+    saveConn();
+    refreshQr();
+    addMsg('system', `${t('meshFilled')}: ${url}`);
+  } catch {
+    addMsg('system', t('meshMissing'));
+  }
+}
+
 function init() {
   applyI18n();
   loadConn();
@@ -235,6 +297,8 @@ function init() {
       addMsg('system', redactUrl(link));
     }
   };
+  const fillBtn = $('btnFillMesh');
+  if (fillBtn) fillBtn.onclick = fillMeshAddress;
   $('draft').addEventListener('keydown', (e) => {
     if (e.key === 'Enter' && !e.shiftKey) {
       e.preventDefault();
@@ -243,7 +307,6 @@ function init() {
   });
   setupSpeech();
   refreshQr();
-  // Auto-connect when opened via pair link / same host
   if (localStorage.getItem(LS_TOKEN) || location.search.includes('token')) {
     connect();
   }

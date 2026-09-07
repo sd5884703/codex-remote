@@ -33,13 +33,14 @@
       <input id="serverUrl" type="url" autocomplete="off" />
       <label class="hint" data-i18n="pairToken">配对令牌</label>
       <input id="pairToken" type="password" autocomplete="off" />
-      <div class="row" style="margin-top:10px">
+      <div class="row" style="margin-top:10px;flex-wrap:wrap">
         <button type="button" class="primary" id="btnConnect" data-i18n="connect">连接</button>
         <button type="button" id="btnSave" data-i18n="save">保存</button>
+        <button type="button" id="btnFillMesh" data-i18n="fillMesh">填入出门地址</button>
         <button type="button" id="btnCopy" data-i18n="copyLink">复制配对链接</button>
         <button type="button" class="danger" id="btnClear" data-i18n="clear">清空会话</button>
       </div>
-      <p class="hint" data-i18n="pairHint">在 Mac 终端查看配对 URL / 二维码</p>
+      <p class="hint" data-i18n="pairHint">在电脑终端查看配对二维码或链接</p>
       <p class="hint" data-i18n="scanQr">配对二维码</p>
       <img id="qrImg" class="qr" alt="QR" />
       <p class="hint" data-i18n="installPwa">可添加到主屏幕</p>
