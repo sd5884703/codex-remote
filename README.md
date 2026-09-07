@@ -1,60 +1,52 @@
-# 编码遥控 / CodexRemote
+# 编码遥控
 
-手机语音/文字 ↔ 电脑守护进程（Mac / Windows）↔ 本地 Codex（薄 Remote I/O）。
+Phone remote for local Codex on your home computer.
 
-**Primary path: going-out via private mesh (Tailscale).** LAN is appendix; Cloudflare is optional backup.
-主路径：出门 + 私人组网（Tailscale）。局域网为附录；Cloudflare 为备选。
+用手机遥控家里电脑上的本地编码助手（Codex）。电脑跑一个小服务，手机用浏览器打开页面发文字（可选语音）。模型相关密钥只留在电脑，不进手机。
 
-Default port **8787**. UI default language: Chinese (switchable).
+支持 Mac 与 Windows。推荐出门场景：先装「私人组网（Tailscale）」，再装「登录后常开」，手机用组网地址连接。家里同一 Wi‑Fi 也能用，但是备用。没有安卓安装包（`.apk`），可把网页加到手机桌面。
 
-## Quick start / 快速开始
+默认端口 `8787`。界面默认中文，可切英文。
+
+## 怎么开始
+
+1. 安装依赖并启动：
 
 ```bash
 npm install
 npm start
 ```
 
-Open `http://127.0.0.1:8787/setup.html` for the going-out wizard.
-打开联网设置向导完成私人组网与「登录后常开」。
+2. 在同一台电脑浏览器打开出门通道向导：
 
-Always-on (login; OS-dispatch):
+`http://127.0.0.1:8787/setup.html`
+
+也可先打开对话页，再点「联网设置」。
+
+3. 按向导完成私人组网与「登录后常开」。完整步骤见 **[docs/使用说明.md](docs/使用说明.md)**。
+
+登录后常开（装 / 卸）：
 
 ```bash
 npm run install:always-on
 npm run uninstall:always-on
 ```
 
-See **docs/使用说明.md** for the full Chinese guide.
+## 这个仓库里有什么
 
-## Features / 功能
-- Going-out wizard: private mesh (Tailscale) checklist, always-on install, mesh address summary
-- Computer daemon: pair secret, PWA, WebSocket chat, prefer Tailscale IP in pair/QR when present
-- Local Codex bridge; stub path via `npm run start:stub` unchanged
-- Mobile PWA: text; long-press mic; zh/en; connect failure hints (服务未开 / 组网未在线 / 地址或钥匙不对)
-- Security: pairing required; model credentials stay on the computer only
+- `daemon/`：电脑上的服务（网页、配对、对话转发）
+- `public/`：手机网页与出门向导
+- `scripts/`：登录后常开的安装/卸载脚本（Mac / Windows；Linux 仅箱测）
+- `docs/使用说明.md`：面向普通人的完整中文说明
 
-## Pairing and threat model
+## 安全（简短）
 
-- First run creates ~/.codex-remote/config.json with pairToken (mode 0600).
-- WebSocket and protected REST require the pair token.
-- Always-on install sets exposeLan so mesh can reach the port; token still required.
-- Phone never stores OpenAI or Codex API credentials.
+- 需要配对令牌（一把长钥匙）才能聊天。
+- 装「登录后常开」会允许组网访问本机端口；没有令牌仍不能聊天。
+- 手机不保存模型服务商的密钥。
 
-## Layout
+## 许可与仓库
 
-- `daemon/index.js` — HTTP + WS + Codex bridge + `/api/netinfo`
-- `public/` — mobile PWA + setup wizard
-- `scripts/always-on.js` — OS dispatch (Mac / Windows / linux QA)
-- `scripts/install-launch-agent.sh` — Mac launchd
-- `scripts/windows/` — Windows Scheduled Task scripts
-- `scripts/install-keepalive-linux.sh` — linux box QA keepalive
-- `docs/使用说明.md` — Chinese user guide (going-out first)
-- `docs/specs/PHASE1_TAILSCALE_FOOLPROOF.md` — phase-1 acceptance spec
+MIT © 2026 孟大大（GitHub: [sd5884703](https://github.com/sd5884703)）。可自由使用、修改与分享；见根目录 `LICENSE`。
 
-## License / 许可
-
-MIT © 2026 孟大大（GitHub: sd5884703）. Free to use, modify, and share.
-MIT 协议开源：可自由使用、修改与分享；详见根目录 `LICENSE`。
-
-Public purpose / 公开用途：thin phone ↔ computer Remote I/O for local Codex (not an orchestrator).
-公开用途：手机 ↔ 电脑的薄 Remote I/O，对接本机 Codex（不是编排器）。
+公开仓库：https://github.com/sd5884703/codex-remote
