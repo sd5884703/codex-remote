@@ -259,7 +259,7 @@
       } else if (enableTs) {
         lines.push(data.summaryNoMesh || '尚未读到组网地址：请在电脑 Tailscale 查看后手动填写稳定地址，或刷新本页。');
       }
-      lines.push('配对钥匙：沿用 ~/.codex-remote/config.json 中的 pairToken（终端 Pair 链接里也有）。');
+      lines.push('配对钥匙：沿用用户目录下 .codex-remote 配置文件里的配对令牌（终端里的配对链接里也有）。');
       if (data.sleepWarn) lines.push(data.sleepWarn);
       lines.push('本机平台：' + hostPlatform + (netinfo && netinfo.alwaysOn && netinfo.alwaysOn.method ? ' / ' + netinfo.alwaysOn.method : ''));
 
