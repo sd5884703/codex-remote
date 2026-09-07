@@ -4,14 +4,14 @@
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#0f1419" />
-  <title>联网设置 · 编码遥控</title>
+  <title>出门通道向导 · 编码遥控</title>
   <link rel="stylesheet" href="./style.css" />
   <link rel="manifest" href="./manifest.webmanifest" />
 </head>
 <body>
   <header>
     <div>
-      <h1 data-i18n="wizardTitle">远程访问向导</h1>
+      <h1 data-i18n="wizardTitle">出门通道向导</h1>
       <div class="sub" data-i18n="appName">编码遥控</div>
     </div>
     <nav>
@@ -19,58 +19,277 @@
       <a class="btn" href="./index.html" data-i18n="back">返回对话</a>
     </nav>
   </header>
-  <main id="wizardRoot" style="overflow:auto">
-    <section class="panel">
-      <h2 data-i18n="lanTitle">默认：局域网</h2>
-      <p data-i18n="lanBody">手机与 Mac 同一 Wi‑Fi，扫描终端二维码即可。无需公网 IP。</p>
-    </section>
-  </main>
+  <main id="wizardRoot" style="overflow:auto"></main>
   <script type="module">
     import { getLang, setLang, applyI18n, t } from './i18n.js';
     import { WIZARD } from './wizard.js';
 
-    function panel(title, prosLabel, consLabel, stepsLabel, data) {
-      const sec = document.createElement('section');
-      sec.className = 'panel';
-      const h2 = document.createElement('h2');
-      h2.textContent = title;
-      sec.appendChild(h2);
-      const hPros = document.createElement('h3');
-      hPros.textContent = prosLabel;
-      sec.appendChild(hPros);
-      const ulP = document.createElement('ul');
-      (data.pros || []).forEach((x) => { const li = document.createElement('li'); li.textContent = x; ulP.appendChild(li); });
-      sec.appendChild(ulP);
-      const hCons = document.createElement('h3');
-      hCons.textContent = consLabel;
-      sec.appendChild(hCons);
-      const ulC = document.createElement('ul');
-      (data.cons || []).forEach((x) => { const li = document.createElement('li'); li.textContent = x; ulC.appendChild(li); });
-      sec.appendChild(ulC);
-      const hSteps = document.createElement('h3');
-      hSteps.textContent = stepsLabel;
-      sec.appendChild(hSteps);
-      const ol = document.createElement('ol');
-      (data.steps || []).forEach((x) => { const li = document.createElement('li'); li.textContent = x; ol.appendChild(li); });
-      sec.appendChild(ol);
-      return sec;
+    const LS_URL = 'codex-remote-server-url';
+    const LS_TOKEN = 'codex-remote-token';
+    const LS_WIZ = 'codex-remote-wizard';
+
+    function loadWizardState() {
+      try { return JSON.parse(localStorage.getItem(LS_WIZ) || '{}'); } catch { return {}; }
+    }
+    function saveWizardState(st) {
+      localStorage.setItem(LS_WIZ, JSON.stringify(st));
     }
 
-    function render() {
+    let step = Number(loadWizardState().step) || 0;
+    let enableTs = loadWizardState().enableTs !== false;
+    let checks = loadWizardState().checks || {};
+    let netinfo = null;
+    let lastMsg = '';
+
+    async function fetchNetinfo() {
+      try {
+        const r = await fetch('/api/netinfo', { cache: 'no-store' });
+        if (r.ok) netinfo = await r.json();
+      } catch { netinfo = null; }
+    }
+
+    function w() {
       const lang = getLang();
-      const w = WIZARD[lang] || WIZARD.zh;
+      return WIZARD[lang] || WIZARD.zh;
+    }
+
+    function el(tag, attrs, kids) {
+      const n = document.createElement(tag);
+      if (attrs) Object.entries(attrs).forEach(([k, v]) => {
+        if (k === 'text') n.textContent = v;
+        else if (k === 'html') n.innerHTML = v;
+        else if (k === 'className') n.className = v;
+        else if (k.startsWith('on') && typeof v === 'function') n.addEventListener(k.slice(2).toLowerCase(), v);
+        else if (v === true) n.setAttribute(k, '');
+        else if (v !== false && v != null) n.setAttribute(k, v);
+      });
+      (kids || []).forEach((c) => { if (c) n.appendChild(c); });
+      return n;
+    }
+
+    async function postAlwaysOn(action) {
+      const token = localStorage.getItem(LS_TOKEN) || '';
+      const r = await fetch('/api/setup/always-on', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'X-Pair-Token': token } : {}),
+        },
+        body: JSON.stringify({ action }),
+      });
+      const j = await r.json().catch(() => ({}));
+      if (!r.ok) throw new Error(j.message || j.error || String(r.status));
+      return j;
+    }
+
+    async function fillMesh() {
+      const token = localStorage.getItem(LS_TOKEN) || '';
+      let info = netinfo;
+      if (!info) await fetchNetinfo();
+      info = netinfo;
+      const mesh = info && (info.meshAddress || (info.tailscale && info.tailscale.ip));
+      const port = (info && info.port) || 8787;
+      if (!mesh) {
+        lastMsg = t('meshMissing');
+        render();
+        return;
+      }
+      const url = 'http://' + mesh + ':' + port;
+      localStorage.setItem(LS_URL, url);
+      if (token) {
+        /* keep existing token */
+      } else if (info && info.pairHintToken) {
+        localStorage.setItem(LS_TOKEN, info.pairHintToken);
+      }
+      lastMsg = t('meshFilled') + '：' + url;
+      render();
+    }
+
+    function persist() {
+      saveWizardState({ step, enableTs, checks });
+    }
+
+    function renderStep0(root, data) {
+      root.appendChild(el('section', { className: 'panel' }, [
+        el('h2', { text: data.leadTitle }),
+        el('p', { text: data.leadBody }),
+        el('label', { className: 'row', style: 'margin-top:12px;gap:10px;align-items:flex-start' }, [
+          el('input', {
+            type: 'checkbox',
+            id: 'chkEnableTs',
+            checked: enableTs ? true : false,
+            onChange: (e) => { enableTs = e.target.checked; persist(); render(); },
+          }),
+          el('span', { text: data.enableTs }),
+        ]),
+        enableTs ? null : el('p', { className: 'hint', style: 'color:#fecaca', text: data.skipWarn }),
+        el('div', { className: 'row', style: 'margin-top:14px' }, [
+          el('button', {
+            type: 'button',
+            className: 'primary',
+            text: data.nextBtn,
+            onClick: () => { step = enableTs ? 1 : 3; persist(); render(); },
+          }),
+        ]),
+      ]));
+    }
+
+    function renderStep1(root, data) {
+      const tsOk = !!(netinfo && (netinfo.tailscale && (netinfo.tailscale.binary || netinfo.tailscale.ip)));
+      const steps = data.tsSteps || [];
+      const list = el('div', {});
+      steps.forEach((text, i) => {
+        const id = 'ts-' + i;
+        list.appendChild(el('label', { className: 'row', style: 'align-items:flex-start;margin:8px 0;gap:10px' }, [
+          el('input', {
+            type: 'checkbox',
+            checked: !!checks[id],
+            onChange: (e) => { checks[id] = e.target.checked; persist(); },
+          }),
+          el('span', { text: (i + 1) + '. ' + text }),
+        ]));
+      });
+      root.appendChild(el('section', { className: 'panel' }, [
+        el('h2', { text: data.tsTitle }),
+        el('p', { text: data.tsIntro }),
+        el('p', {
+          className: 'hint',
+          style: tsOk ? 'color:#86efac' : '',
+          text: tsOk ? data.detectOk : data.detectNo,
+        }),
+        netinfo && netinfo.meshAddress
+          ? el('p', { text: '组网地址：' + netinfo.meshAddress + (netinfo.magicDns ? ' / ' + netinfo.magicDns : '') })
+          : null,
+        el('p', {}, [
+          el('a', {
+            href: 'https://tailscale.com/download',
+            target: '_blank',
+            rel: 'noopener',
+            text: '打开 Tailscale 下载页',
+          }),
+        ]),
+        list,
+        el('div', { className: 'row', style: 'margin-top:12px' }, [
+          el('button', { type: 'button', text: '上一步', onClick: () => { step = 0; persist(); render(); } }),
+          el('button', {
+            type: 'button',
+            className: 'primary',
+            text: data.nextBtn,
+            onClick: async () => { await fetchNetinfo(); step = 2; persist(); render(); },
+          }),
+        ]),
+      ]));
+    }
+
+    function renderStep2(root, data) {
+      const on = !!(netinfo && netinfo.alwaysOn && netinfo.alwaysOn.installed);
+      root.appendChild(el('section', { className: 'panel' }, [
+        el('h2', { text: data.alwaysOnTitle }),
+        el('p', { text: data.alwaysOnBody }),
+        el('p', { className: 'hint', text: on ? '当前：常开已安装' : '当前：常开未安装' }),
+        el('p', { className: 'hint', text: data.alwaysOnCmd }),
+        el('div', { className: 'row', style: 'margin-top:12px;flex-wrap:wrap' }, [
+          el('button', {
+            type: 'button',
+            className: 'primary',
+            text: data.installAlwaysOn,
+            onClick: async () => {
+              try {
+                lastMsg = '安装中…';
+                render();
+                const j = await postAlwaysOn('install');
+                lastMsg = j.message || '常开已安装';
+                await fetchNetinfo();
+              } catch (e) {
+                lastMsg = '安装失败：' + e.message + '。也可在 Mac 终端运行 npm run install:always-on';
+              }
+              render();
+            },
+          }),
+          el('button', {
+            type: 'button',
+            className: 'danger',
+            text: data.uninstallAlwaysOn,
+            onClick: async () => {
+              try {
+                const j = await postAlwaysOn('uninstall');
+                lastMsg = j.message || '常开已卸载';
+                await fetchNetinfo();
+              } catch (e) {
+                lastMsg = '卸载失败：' + e.message + '。也可运行 npm run uninstall:always-on';
+              }
+              render();
+            },
+          }),
+        ]),
+        lastMsg ? el('p', { className: 'hint', text: lastMsg }) : null,
+        el('div', { className: 'row', style: 'margin-top:12px' }, [
+          el('button', { type: 'button', text: '上一步', onClick: () => { step = 1; persist(); render(); } }),
+          el('button', {
+            type: 'button',
+            className: 'primary',
+            text: data.nextBtn,
+            onClick: async () => { await fetchNetinfo(); step = 3; persist(); render(); },
+          }),
+        ]),
+      ]));
+    }
+
+    function renderStep3(root, data) {
+      const on = !!(netinfo && netinfo.alwaysOn && netinfo.alwaysOn.installed);
+      const mesh = netinfo && (netinfo.meshAddress || (netinfo.tailscale && netinfo.tailscale.ip));
+      const port = (netinfo && netinfo.port) || 8787;
+      const lines = [];
+      if (enableTs) {
+        lines.push('已选择：启用出门通道（私人组网 / Tailscale）。');
+      } else {
+        lines.push(data.skipWarn);
+      }
+      lines.push(on ? '登录后常开：已安装。' : '登录后常开：未安装（可稍后 npm run install:always-on）。');
+      if (mesh) {
+        lines.push('手机应保存的稳定地址：http://' + mesh + ':' + port + '（组网地址，不是家里 Wi-Fi）。');
+      } else if (enableTs) {
+        lines.push('尚未读到组网地址：请确认 Mac 上私人组网（Tailscale）已登录在线后刷新本页。');
+      }
+      lines.push('配对钥匙：沿用 ~/.codex-remote/config.json 中的 pairToken（终端 Pair 链接里也有）。');
+
+      root.appendChild(el('section', { className: 'panel' }, [
+        el('h2', { text: data.summaryTitle }),
+        el('p', { text: data.summaryBody }),
+        el('ul', {}, lines.map((x) => el('li', { text: x }))),
+        el('div', { className: 'row', style: 'margin-top:12px;flex-wrap:wrap' }, [
+          el('button', {
+            type: 'button',
+            className: 'primary',
+            text: data.fillMesh,
+            onClick: () => fillMesh(),
+          }),
+          el('a', { className: 'btn', href: './index.html', text: t('back') }),
+        ]),
+        lastMsg ? el('p', { className: 'hint', text: lastMsg }) : null,
+      ]));
+
+      root.appendChild(el('section', { className: 'panel' }, [
+        el('h2', { text: data.lanTitle }),
+        el('p', { text: data.lanBody }),
+      ]));
+
+      root.appendChild(el('section', { className: 'panel' }, [
+        el('h2', { text: data.cfTitle }),
+        el('p', { text: data.cfNote }),
+        el('ol', {}, (data.cfSteps || []).map((x) => el('li', { text: x }))),
+      ]));
+    }
+
+    async function render() {
+      const data = w();
       const root = document.getElementById('wizardRoot');
-      root.querySelectorAll('[data-dyn]').forEach((n) => n.remove());
-      const pros = t('pros');
-      const cons = t('cons');
-      const steps = t('steps');
-      const ts = panel(w.tsTitle, pros, cons, steps, { pros: w.tsPros, cons: w.tsCons, steps: w.tsSteps });
-      ts.setAttribute('data-dyn', '1');
-      const cf = panel(w.cfTitle, pros, cons, steps, { pros: w.cfPros, cons: w.cfCons, steps: w.cfSteps });
-      cf.setAttribute('data-dyn', '1');
-      root.appendChild(ts);
-      root.appendChild(cf);
-      document.getElementById('btnLang').textContent = lang === 'zh' ? 'EN' : '中文';
+      root.innerHTML = '';
+      document.getElementById('btnLang').textContent = getLang() === 'zh' ? 'EN' : '中文';
+      if (step === 0) renderStep0(root, data);
+      else if (step === 1) renderStep1(root, data);
+      else if (step === 2) renderStep2(root, data);
+      else renderStep3(root, data);
       applyI18n();
     }
 
@@ -78,6 +297,8 @@
       setLang(getLang() === 'zh' ? 'en' : 'zh');
       render();
     };
+
+    await fetchNetinfo();
     render();
   </script>
 </body>
