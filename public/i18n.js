@@ -36,7 +36,7 @@ export const STRINGS = {
     lanTitle: '附录：家里局域网',
     lanBody: '手机与电脑同一 Wi‑Fi 时可用；不是出门主路径。',
     tsTitle: 'Tailscale（在自己的设备之间建立加密私有网络）',
-    cfTitle: '备选：Cloudflare 隧道',
+    cfTitle: '备选：Cloudflare 隧道（把公网流量转到本机端口）',
     pros: '优点',
     cons: '缺点',
     steps: '步骤',

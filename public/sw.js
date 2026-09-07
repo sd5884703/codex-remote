@@ -1,4 +1,4 @@
-const CACHE = 'codex-remote-v8';
+const CACHE = 'codex-remote-v9';
 const ASSETS = [
   './',
   './index.html',

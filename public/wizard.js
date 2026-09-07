@@ -84,15 +84,15 @@ export const WIZARD = {
     summaryBody: '请确认下面信息，并把 Tailscale 稳定地址保存到手机。',
     summaryNoMesh: '尚未读到 Tailscale 地址：请在电脑的 Tailscale 里查看 100.x IP 或魔术 DNS，在手机里手动填写稳定地址（例如 http://100.x.x.x:8787），确认 Tailscale 在线后也可刷新本页。',
     fillMesh: '在本机一键填入并保存外出地址',
-    cfTitle: '备选进阶：Cloudflare 隧道',
-    cfNote: '仅作备份/进阶，不是主路径。请优先用Tailscale。',
+    cfTitle: '备选进阶：Cloudflare 隧道（把公网流量转到本机端口）',
+    cfNote: '仅作备份/进阶，不是主路径。请优先用 Tailscale。',
     cfSteps: [
       '按官方文档安装 cloudflared',
       '创建隧道，入口指向本机 8787（建议 http2）',
       '务必保留配对令牌；建议在隧道上加 Access 门禁',
     ],
     lanTitle: '附录：家里局域网（同一 Wi-Fi）',
-    lanBody: '仅当手机与电脑连同一个 Wi-Fi 时可用。不能代替外出访问。若跳过Tailscale，可用终端里打印的局域网地址。',
+    lanBody: '仅当手机与电脑连同一个 Wi-Fi 时可用。不能代替外出访问。若跳过 Tailscale，可用终端里打印的局域网地址。',
   },
 };
 
