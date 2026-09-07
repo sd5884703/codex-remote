@@ -28,7 +28,7 @@ See **docs/使用说明.md** for the full Chinese guide.
 
 ## Features / 功能
 - Going-out wizard: private mesh (Tailscale) checklist, always-on install, mesh address summary
-- Mac daemon: pair secret, PWA, WebSocket chat, prefer Tailscale IP in pair/QR when present
+- Computer daemon: pair secret, PWA, WebSocket chat, prefer Tailscale IP in pair/QR when present
 - Local Codex bridge; stub path via `npm run start:stub` unchanged
 - Mobile PWA: text; long-press mic; zh/en; connect failure hints (服务未开 / 组网未在线 / 地址或钥匙不对)
 - Security: pairing required; model credentials stay on the computer only
@@ -50,3 +50,11 @@ See **docs/使用说明.md** for the full Chinese guide.
 - `scripts/install-keepalive-linux.sh` — linux box QA keepalive
 - `docs/使用说明.md` — Chinese user guide (going-out first)
 - `docs/specs/PHASE1_TAILSCALE_FOOLPROOF.md` — phase-1 acceptance spec
+
+## License / 许可
+
+MIT © 2026 孟大大（GitHub: sd5884703）. Free to use, modify, and share.
+MIT 协议开源：可自由使用、修改与分享；详见根目录 `LICENSE`。
+
+Public purpose / 公开用途：thin phone ↔ computer Remote I/O for local Codex (not an orchestrator).
+公开用途：手机 ↔ 电脑的薄 Remote I/O，对接本机 Codex（不是编排器）。

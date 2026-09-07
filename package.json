@@ -3,6 +3,7 @@
   "version": "0.1.0",
   "description": "编码遥控 — thin Remote I/O: phone voice/text ↔ local Codex",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "scripts": {
     "start": "node daemon/index.js",
