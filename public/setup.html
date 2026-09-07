@@ -164,7 +164,7 @@
           text: tsOk ? data.detectOk : data.detectNo,
         }),
         netinfo && netinfo.meshAddress
-          ? el('p', { text: 'Tailscale 地址：' + netinfo.meshAddress + (netinfo.magicDns ? ' / ' + netinfo.magicDns : '') })
+          ? el('p', { text: ' Tailscale 地址：' + netinfo.meshAddress + (netinfo.magicDns ? ' / ' + netinfo.magicDns : '') })
           : null,
         el('p', {}, [
           el('a', {
@@ -249,15 +249,15 @@
       const port = (netinfo && netinfo.port) || 8787;
       const lines = [];
       if (enableTs) {
-        lines.push('已选择：启用外出访问（Tailscale）。');
+        lines.push('已选择：启用外出访问（ Tailscale ）。');
       } else {
         lines.push(data.skipWarn);
       }
       lines.push(on ? '登录后自动启动：已安装。' : '登录后自动启动：未安装（可稍后 npm run install:always-on）。');
       if (mesh) {
-        lines.push('手机应保存的稳定地址：http://' + mesh + ':' + port + '（Tailscale 地址，不是家里 Wi-Fi）。');
+        lines.push('手机应保存的稳定地址：http://' + mesh + ':' + port + '（ Tailscale 地址，不是家里 Wi-Fi）。');
       } else if (enableTs) {
-        lines.push(data.summaryNoMesh || '尚未读到Tailscale 地址：请在电脑 Tailscale 查看后手动填写稳定地址，或刷新本页。');
+        lines.push(data.summaryNoMesh || '尚未读到 Tailscale 地址：请在电脑 Tailscale 查看后手动填写稳定地址，或刷新本页。');
       }
       lines.push('配对令牌：沿用用户目录下 `.codex-remote` 配置文件里的配对令牌（终端里的配对链接里也有）。');
       if (data.sleepWarn) lines.push(data.sleepWarn);
