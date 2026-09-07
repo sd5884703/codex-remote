@@ -17,6 +17,8 @@ const DEFAULT_PORT = 8787;
 const CONFIG_DIR = path.join(os.homedir(), '.codex-remote');
 const CONFIG_FILE = path.join(CONFIG_DIR, 'config.json');
 const HISTORY_FILE = path.join(CONFIG_DIR, 'history.jsonl');
+const LAUNCH_LABEL = 'com.codexremote.daemon';
+const LAUNCH_PLIST = path.join(os.homedir(), 'Library', 'LaunchAgents', `${LAUNCH_LABEL}.plist`);
 
 function ensureConfigDir() {
   if (!fs.existsSync(CONFIG_DIR)) fs.mkdirSync(CONFIG_DIR, { recursive: true, mode: 0o700 });
@@ -55,19 +57,107 @@ function saveConfig(cfg) {
 
 function getLanIPv4() {
   const ifaces = os.networkInterfaces();
-  const preferred = [];
-  const others = [];
+  const lan = [];
+  const mesh = [];
   for (const name of Object.keys(ifaces)) {
     for (const iface of ifaces[name] || []) {
       if (iface.family !== 'IPv4' && iface.family !== 4) continue;
       if (iface.internal) continue;
       const addr = iface.address;
-      if (addr.startsWith('100.')) others.push({ name, address: addr, kind: 'tailscale' });
-      else preferred.push({ name, address: addr, kind: 'lan' });
+      if (addr.startsWith('100.')) mesh.push({ name, address: addr, kind: 'tailscale' });
+      else lan.push({ name, address: addr, kind: 'lan' });
     }
   }
-  const list = [...preferred, ...others];
-  return { primary: list[0]?.address || '127.0.0.1', all: list };
+  // Prefer mesh when Tailscale is present (going-out primary path)
+  const list = mesh.length ? [...mesh, ...lan] : [...lan, ...mesh];
+  return {
+    primary: list[0]?.address || '127.0.0.1',
+    all: list,
+    mesh: mesh[0]?.address || null,
+    lan: lan[0]?.address || null,
+  };
+}
+
+function findTailscaleBin() {
+  const candidates = [
+    'tailscale',
+    '/usr/local/bin/tailscale',
+    '/opt/homebrew/bin/tailscale',
+    '/Applications/Tailscale.app/Contents/MacOS/Tailscale',
+  ];
+  for (const c of candidates) {
+    try {
+      if (c.includes('/') && !fs.existsSync(c)) continue;
+      const r = runSync(c, ['version'], { encoding: 'utf8', timeout: 4000 });
+      if (!r.error && r.status !== 127) return c;
+    } catch { /* next */ }
+  }
+  try {
+    const r = runSync('which', ['tailscale'], { encoding: 'utf8', timeout: 3000 });
+    if (r.status === 0 && r.stdout.trim()) return r.stdout.trim();
+  } catch { /* ignore */ }
+  return null;
+}
+
+function detectTailscale() {
+  const nets = getLanIPv4();
+  const bin = findTailscaleBin();
+  let ip = nets.mesh;
+  let magicDns = null;
+  let backendState = null;
+  if (bin) {
+    try {
+      const ipR = runSync(bin, ['ip', '-4'], { encoding: 'utf8', timeout: 4000 });
+      if (ipR.status === 0 && ipR.stdout.trim()) ip = ipR.stdout.trim().split('\n')[0].trim();
+    } catch { /* ignore */ }
+    try {
+      const st = runSync(bin, ['status', '--json'], { encoding: 'utf8', timeout: 6000, maxBuffer: 2 * 1024 * 1024 });
+      if (st.status === 0 && st.stdout) {
+        const j = JSON.parse(st.stdout);
+        backendState = j.BackendState || null;
+        const self = j.Self || {};
+        if (!ip && Array.isArray(self.TailscaleIPs)) {
+          const v4 = self.TailscaleIPs.find((x) => String(x).includes('.'));
+          if (v4) ip = v4;
+        }
+        if (self.DNSName) magicDns = String(self.DNSName).replace(/\.$/, '');
+      }
+    } catch { /* ignore */ }
+  }
+  return {
+    binary: Boolean(bin),
+    path: bin,
+    ip: ip || null,
+    magicDns,
+    backendState,
+    online: Boolean(ip) || backendState === 'Running',
+  };
+}
+
+function alwaysOnStatus() {
+  const installed = fs.existsSync(LAUNCH_PLIST);
+  return { installed, plist: installed ? LAUNCH_PLIST : null, label: LAUNCH_LABEL };
+}
+
+function runAlwaysOnScript(action) {
+  const script = path.join(
+    ROOT,
+    'scripts',
+    action === 'uninstall' ? 'uninstall-launch-agent.sh' : 'install-launch-agent.sh',
+  );
+  if (!fs.existsSync(script)) {
+    const err = new Error(`script missing: ${script}`);
+    err.code = 'SCRIPT_MISSING';
+    throw err;
+  }
+  const r = runSync('bash', [script], { encoding: 'utf8', timeout: 60000, env: process.env, cwd: ROOT });
+  return {
+    ok: r.status === 0,
+    status: r.status,
+    stdout: (r.stdout || '').slice(0, 4000),
+    stderr: (r.stderr || '').slice(0, 2000),
+    alwaysOn: alwaysOnStatus(),
+  };
 }
 
 
@@ -267,6 +357,17 @@ function tokenOk(cfg, token) {
   return Boolean(token) && token === cfg.pairToken;
 }
 
+function isLocalRequest(req) {
+  const ra = req.socket && req.socket.remoteAddress;
+  return ra === '127.0.0.1' || ra === '::1' || ra === '::ffff:127.0.0.1';
+}
+
+function preferHost(nets, cfg) {
+  if (nets.mesh) return nets.mesh;
+  if (cfg.exposeLan && nets.lan) return nets.lan;
+  return nets.primary || '127.0.0.1';
+}
+
 function serveStatic(req, res, urlObj) {
   let rel = urlObj.pathname === '/' ? '/index.html' : urlObj.pathname;
   rel = decodeURIComponent(rel);
@@ -296,8 +397,9 @@ async function main() {
   const cfg = loadConfig();
   const port = Number(process.env.PORT) || cfg.port || DEFAULT_PORT;
   const lan = getLanIPv4();
-  const pairUrl = `http://${lan.primary}:${port}/?token=${cfg.pairToken}`;
-  const wsUrl = `ws://${lan.primary}:${port}/ws?token=${cfg.pairToken}`;
+  const hostForPair = preferHost(lan, cfg);
+  const pairUrl = `http://${hostForPair}:${port}/?token=${cfg.pairToken}`;
+  const wsUrl = `ws://${hostForPair}:${port}/ws?token=${cfg.pairToken}`;
 
   const server = http.createServer(async (req, res) => {
     try {
@@ -309,16 +411,71 @@ async function main() {
         return;
       }
 
+      if (urlObj.pathname === '/api/netinfo') {
+        const nets = getLanIPv4();
+        const ts = detectTailscale();
+        const meshAddress = ts.ip || nets.mesh || null;
+        sendJson(res, 200, {
+          ok: true,
+          port,
+          exposeLan: Boolean(cfgNow.exposeLan),
+          listenHost: cfgNow.listenHost || (cfgNow.exposeLan ? '0.0.0.0' : '127.0.0.1'),
+          lan: nets,
+          meshAddress,
+          magicDns: ts.magicDns || null,
+          tailscale: ts,
+          alwaysOn: alwaysOnStatus(),
+        });
+        return;
+      }
+
+      if (urlObj.pathname === '/api/setup/always-on' && req.method === 'POST') {
+        const token = extractToken(req, urlObj);
+        if (!isLocalRequest(req) && !tokenOk(cfgNow, token)) {
+          sendJson(res, 401, { ok: false, error: 'pairing_required', message: '需要配对令牌或在本机浏览器操作' });
+          return;
+        }
+        let body = '';
+        for await (const chunk of req) body += chunk;
+        let action = 'install';
+        try {
+          const j = body ? JSON.parse(body) : {};
+          if (j.action === 'uninstall') action = 'uninstall';
+        } catch { /* default install */ }
+        try {
+          const result = runAlwaysOnScript(action);
+          sendJson(res, result.ok ? 200 : 500, {
+            ok: result.ok,
+            action,
+            message: result.ok
+              ? (action === 'uninstall' ? '常开已卸载' : '常开已安装（已开启组网可访问监听）')
+              : (result.stderr || result.stdout || 'script failed'),
+            alwaysOn: result.alwaysOn,
+            log: result.stdout,
+          });
+        } catch (e) {
+          sendJson(res, 500, { ok: false, error: e.code || 'ERROR', message: e.message });
+        }
+        return;
+      }
+
       if (urlObj.pathname === '/api/status') {
         const token = extractToken(req, urlObj);
         if (!tokenOk(cfgNow, token)) {
           sendJson(res, 401, { ok: false, error: 'pairing_required' });
           return;
         }
+        const nets = getLanIPv4();
+        const ts = detectTailscale();
         sendJson(res, 200, {
           ok: true,
-          lan,
+          lan: nets,
+          meshAddress: ts.ip || nets.mesh || null,
+          magicDns: ts.magicDns || null,
+          tailscale: ts,
+          alwaysOn: alwaysOnStatus(),
           port,
+          exposeLan: Boolean(cfgNow.exposeLan),
           codex: getCodexStatus(),
           pairingEnabled: cfgNow.pairingEnabled,
         });
@@ -332,12 +489,14 @@ async function main() {
           return;
         }
         const lanNow = getLanIPv4();
-        const pairNow = `http://${lanNow.primary}:${port}/?token=${cfgNow.pairToken}`;
-        const wsNow = `ws://${lanNow.primary}:${port}/ws?token=${cfgNow.pairToken}`;
+        const host = preferHost(lanNow, cfgNow);
+        const pairNow = `http://${host}:${port}/?token=${cfgNow.pairToken}`;
+        const wsNow = `ws://${host}:${port}/ws?token=${cfgNow.pairToken}`;
         sendJson(res, 200, {
           ok: true,
           port,
           lan: lanNow,
+          meshAddress: lanNow.mesh,
           pairUrl: pairNow,
           wsUrl: wsNow,
           token: cfgNow.pairToken,
@@ -353,7 +512,8 @@ async function main() {
           return;
         }
         const lanNow = getLanIPv4();
-        const pairNow = `http://${lanNow.primary}:${port}/?token=${cfgNow.pairToken}`;
+        const host = preferHost(lanNow, cfgNow);
+        const pairNow = `http://${host}:${port}/?token=${cfgNow.pairToken}`;
         const png = await QRCode.toBuffer(pairNow, { type: 'png', width: 320, margin: 2 });
         res.writeHead(200, { 'Content-Type': 'image/png', 'Cache-Control': 'no-store' });
         res.end(png);
@@ -390,10 +550,12 @@ async function main() {
       return;
     }
 
+    const nets = getLanIPv4();
     socket.send(JSON.stringify({
       type: 'hello',
       codex: getCodexStatus(),
-      lan: getLanIPv4(),
+      lan: nets,
+      meshAddress: nets.mesh,
       port,
     }));
 
@@ -469,30 +631,40 @@ async function main() {
   const bindHost = cfg.exposeLan || listenHost === '0.0.0.0' ? '0.0.0.0' : '127.0.0.1';
   server.listen(port, bindHost, async () => {
     const status = getCodexStatus();
+    const ts = detectTailscale();
+    const mesh = ts.ip || lan.mesh;
     console.log('');
     console.log('=== CodexRemote daemon ===');
     console.log(`Bind:   ${bindHost}:${port}`);
     console.log(`Local:  http://127.0.0.1:${port}`);
+    if (mesh) {
+      console.log(`Mesh:   http://${mesh}:${port}  (私人组网 / Tailscale — 手机请保存此地址)`);
+      if (ts.magicDns) console.log(`DNS:    http://${ts.magicDns}:${port}`);
+    }
     if (bindHost === '0.0.0.0') {
-      console.log(`LAN:    http://${lan.primary}:${port}`);
-      console.log(`Pair:   ${pairUrl}`);
-      console.log(`WS:     ${wsUrl}`);
+      if (lan.lan) console.log(`LAN:    http://${lan.lan}:${port}  (附录：同一 Wi-Fi)`);
+      console.log(`Pair:   http://${hostForPair}:${port}/?token=***`);
+      console.log('(完整 Pair 链接仅在需要时用 /api/pair + 令牌获取；勿把令牌发到公开群)');
     } else {
-      console.log('LAN expose OFF (default). Set exposeLan:true or listenHost:0.0.0.0 in config to allow phone-on-LAN.');
-      console.log(`Pair (localhost): http://127.0.0.1:${port}/?token=${cfg.pairToken}`);
+      console.log('对外监听关闭（默认）。出门/组网请 npm run install:always-on 或将 exposeLan 设为 true。');
+      console.log(`Pair (localhost): http://127.0.0.1:${port}/?token=***`);
     }
     console.log(`Config: ${CONFIG_FILE}`);
     console.log(`Codex:  ${status.found ? status.path : 'NOT FOUND'}`);
+    console.log(`Always-on: ${alwaysOnStatus().installed ? 'yes' : 'no'}`);
     console.log('');
     try {
-      const qrTarget = bindHost === '0.0.0.0' ? pairUrl : `http://127.0.0.1:${port}/?token=${cfg.pairToken}`;
+      // QR uses full token only in this local terminal
+      const qrTarget = bindHost === '0.0.0.0'
+        ? `http://${hostForPair}:${port}/?token=${cfg.pairToken}`
+        : `http://127.0.0.1:${port}/?token=${cfg.pairToken}`;
       const qr = await QRCode.toString(qrTarget, { type: 'terminal', small: true });
       console.log('Scan QR (token only shown in this terminal):');
       console.log(qr);
     } catch (e) {
-      console.log('QR text:', bindHost === '0.0.0.0' ? pairUrl : `http://127.0.0.1:${port}/?token=***`);
+      console.log('QR unavailable');
     }
-    console.log('/api/pair and /api/qr.png require pair token. health: /api/health');
+    console.log('/api/pair and /api/qr.png require pair token. health: /api/health  netinfo: /api/netinfo');
     console.log('');
   });
 }
