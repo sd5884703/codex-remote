@@ -1,82 +1,73 @@
+/** Wizard copy: going-out (private mesh) is primary; LAN appendix; CF demoted. */
 export const WIZARD = {
-  "en": {
-    "cfCons": [
-      "Needs CF account and domain",
-      "China latency can be poor",
-      "Prefer http2; dashboard mostly English",
-      "Keep pair token; enable Access"
+  en: {
+    leadTitle: 'Going-out channel (primary)',
+    leadBody: 'Use private mesh (Tailscale) so your phone can reach the Mac away from home Wi-Fi. LAN is only for same-Wi-Fi appendix.',
+    enableTs: 'Enable going-out via private mesh (Tailscale)',
+    skipWarn: 'You skipped Tailscale — going-out is unavailable. Phone only works on the same home Wi-Fi (see appendix).',
+    tsTitle: 'Private mesh (Tailscale)',
+    tsIntro: 'We cannot log into Tailscale for you. Follow these steps on Mac and phone with the same account.',
+    tsSteps: [
+      'On Mac: install Tailscale from the official download site or App Store, open it, sign in.',
+      'On phone: install Tailscale, sign in with the SAME account.',
+      'Confirm both devices show as Connected / Online in the Tailscale app.',
+      'Note the Mac mesh address (100.x IP or MagicDNS name) — that is what the phone saves, not home Wi-Fi IP.',
+      'Install always-on below so the service starts after Mac login; it will listen so Tailscale can reach the port.',
     ],
-    "cfPros": [
-      "No port mapping; cloudflared dials out",
-      "Custom domain on phone",
-      "Optional Access recommended"
+    detectOk: 'Tailscale looks installed / mesh IP detected on this Mac.',
+    detectNo: 'Tailscale not detected yet. Install and sign in, then tap Next.',
+    nextBtn: 'I have set it up — next',
+    alwaysOnTitle: 'Always-on after login',
+    alwaysOnBody: 'Install a user launchd agent so CodexRemote starts when you log into the Mac. For the Tailscale path it also enables listening on all interfaces (exposeLan) so the phone can reach the port via the mesh.',
+    installAlwaysOn: 'Install always-on',
+    uninstallAlwaysOn: 'Uninstall always-on',
+    alwaysOnCmd: 'Or in Terminal under the project folder: npm run install:always-on / npm run uninstall:always-on',
+    summaryTitle: 'Done — what happened',
+    summaryBody: 'Review below, then save the mesh address on your phone.',
+    fillMesh: 'Fill and save going-out address on this device',
+    cfTitle: 'Optional backup: Cloudflare Tunnel',
+    cfNote: 'Advanced / optional only — not the foolproof primary path. Prefer private mesh (Tailscale).',
+    cfSteps: [
+      'Install cloudflared per official docs',
+      'Create a tunnel pointing at local port 8787 (http2)',
+      'Keep the pair token; prefer Access on the tunnel',
     ],
-    "cfSteps": [
-      "Install cloudflared per official docs",
-      "Run tunnel login",
-      "Create tunnel named codex-remote",
-      "Point ingress to local port 8787 with http2",
-      "Route hostname and run tunnel",
-      "Open https domain with pair token on phone"
-    ],
-    "cfTitle": "Optional: Cloudflare Tunnel",
-    "tsCons": [
-      "Needs an account",
-      "China DERP or control-plane can be flaky",
-      "Extra app on both devices"
-    ],
-    "tsPros": [
-      "Feels like LAN after mesh",
-      "No public IP needed",
-      "Encrypted mesh"
-    ],
-    "tsSteps": [
-      "Install Tailscale on Mac and phone; same account",
-      "Note Mac Tailscale IP (100.x)",
-      "Run npm start on Mac",
-      "Open pair link on phone using mesh IP",
-      "Save URL and token in the app then connect"
-    ],
-    "tsTitle": "Optional: Tailscale"
+    lanTitle: 'Appendix: home LAN (same Wi-Fi)',
+    lanBody: 'Only when phone and Mac share the same Wi-Fi. Not for going out. Use the LAN IP from the Mac terminal if you skip Tailscale.',
   },
-  "zh": {
-    "cfCons": [
-      "需要 Cloudflare 账号与域名",
-      "中国大陆延迟或稳定性可能较差",
-      "须用 http2；控制台多为英文",
-      "公网暴露须保留配对令牌，建议开启 Access"
+  zh: {
+    leadTitle: '出门通道（主路径）',
+    leadBody: '通过私人组网（Tailscale），让手机在外面也能连上家里的 Mac。家里同一 Wi-Fi 只是附录备用，不是主成功路径。',
+    enableTs: '启用出门通道：私人组网（Tailscale）',
+    skipWarn: '你跳过了私人组网（Tailscale）——出门不可用。手机只能在家里同一 Wi-Fi 下使用（见附录）。',
+    tsTitle: '私人组网（Tailscale）',
+    tsIntro: '我们无法替你完成第三方登录。请按下面步骤，在 Mac 和手机上用同一个账号自行安装并登录。',
+    tsSteps: [
+      '在 Mac 上：打开官方下载页或 App Store 安装 Tailscale，打开应用并登录。',
+      '在手机上：安装 Tailscale，用【同一个账号】登录。',
+      '确认两端在 Tailscale 应用里都显示已连接 / 在线。',
+      '记下 Mac 的组网地址（以 100. 开头的 IP，或魔术 DNS 名称）——手机要保存的是这个，不是家里 Wi-Fi 的 192.168 地址。',
+      '下面安装「登录后常开」，并允许组网访问本机端口，这样出门时手机才能连上。',
     ],
-    "cfPros": [
-      "无需端口映射，出站建隧道",
-      "可用自定义域名在手机打开",
-      "可叠加 Access 门禁（建议）"
+    detectOk: '已检测到本机可能已安装私人组网（Tailscale）或已有组网 IP。',
+    detectNo: '尚未检测到私人组网（Tailscale）。请先安装并登录，再点「我已装好，下一步」。',
+    nextBtn: '我已装好，下一步',
+    alwaysOnTitle: '登录后常开',
+    alwaysOnBody: '安装用户级登录启动项，登录 Mac 后自动启动编码遥控。出门路径会同时打开对外监听（exposeLan），以便私人组网（Tailscale）能访问端口。',
+    installAlwaysOn: '安装常开',
+    uninstallAlwaysOn: '卸载常开',
+    alwaysOnCmd: '也可在项目目录终端执行：npm run install:always-on  或  npm run uninstall:always-on',
+    summaryTitle: '完成 — 做了什么',
+    summaryBody: '请确认下面信息，并把组网稳定地址保存到手机。',
+    fillMesh: '在本机一键填入并保存出门地址',
+    cfTitle: '备选进阶：Cloudflare 隧道',
+    cfNote: '仅作备份/进阶，不是傻瓜主路径。请优先用私人组网（Tailscale）。',
+    cfSteps: [
+      '按官方文档安装 cloudflared',
+      '创建隧道，入口指向本机 8787（建议 http2）',
+      '务必保留配对令牌；建议在隧道上加 Access 门禁',
     ],
-    "cfSteps": [
-      "按官方文档安装 cloudflared",
-      "登录 Cloudflare 并创建隧道（如命名 codex-remote）",
-      "入口指向本机 8787，启用 http2",
-      "将域名路由到该隧道并运行 cloudflared",
-      "建议配置 Access；手机用 https 域名加配对令牌打开"
-    ],
-    "cfTitle": "可选：Cloudflare Tunnel",
-    "tsCons": [
-      "需要 Tailscale账号",
-      "中国大陆控制面／DERP可能不稳定",
-      "Mac与手机都需安装客户端"
-    ],
-    "tsPros": [
-      "组网后体感接近局域网，无需公网 IP",
-      "手机用 Tailscale IP访问 Mac守护进程",
-      "加密组网（点对点或 DERP）"
-    ],
-    "tsSteps": [
-      "Mac 安装并登录 Tailscale",
-      "手机安装并登录同一账号 (Tailscale)",
-      "确认两端在线，记下 Tailscale IP",
-      "Mac 运行守护进程（端口 8787）",
-      "手机打开配对链接，主机换成 Tailscale IP",
-      "在应用中保存地址与令牌并连接"
-    ],
-    "tsTitle": "可选：Tailscale"
-  }
+    lanTitle: '附录：家里局域网（同一 Wi-Fi）',
+    lanBody: '仅当手机与 Mac 连同一个 Wi-Fi 时可用。不能代替出门。若跳过私人组网，可用 Mac 终端里打印的局域网地址。',
+  },
 };
