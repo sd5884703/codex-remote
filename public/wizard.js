@@ -35,7 +35,7 @@ export const WIZARD = {
       "Note Mac Tailscale IP (100.x)",
       "Run npm start on Mac",
       "Open pair link on phone using mesh IP",
-      "Save URL and token in PWA then connect"
+      "Save URL and token in the app then connect"
     ],
     "tsTitle": "Optional: Tailscale"
   },

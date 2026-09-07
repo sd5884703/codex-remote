@@ -24,7 +24,7 @@ export const STRINGS = {
     status: '状态',
     codexFound: '已找到 codex',
     codexMissing: '未找到 codex',
-    pairHint: '在 Mac 终端查看配对 URL / 二维码，或打开 /api/pair',
+    pairHint: '在电脑终端查看配对二维码或链接',
     scanQr: '配对二维码',
     copyLink: '复制配对链接',
     copied: '已复制',
@@ -41,7 +41,7 @@ export const STRINGS = {
     cons: '缺点',
     steps: '步骤',
     back: '返回对话',
-    installPwa: '可「添加到主屏幕」安装为 PWA',
+    installPwa: '可「添加到主屏幕」，变成能放在手机桌面的网页应用',
   },
   en: {
     appName: 'CodexRemote',
@@ -67,7 +67,7 @@ export const STRINGS = {
     status: 'Status',
     codexFound: 'codex found',
     codexMissing: 'codex missing',
-    pairHint: 'See pair URL/QR in Mac terminal, or open /api/pair',
+    pairHint: 'See the pair QR or link in the computer terminal',
     scanQr: 'Pairing QR',
     copyLink: 'Copy pair link',
     copied: 'Copied',
@@ -84,7 +84,7 @@ export const STRINGS = {
     cons: 'Cons',
     steps: 'Steps',
     back: 'Back to chat',
-    installPwa: 'Add to Home Screen to install as PWA',
+    installPwa: 'Add to Home Screen - a web app for your phone home screen',
   },
 };
 
