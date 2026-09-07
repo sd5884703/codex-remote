@@ -1,13 +1,16 @@
-# Manual test checklist
-- [ ] Install deps and start daemon
-- [ ] Health endpoint ok
-- [ ] Pair endpoint returns token
-- [ ] Protected status requires token
-- [ ] Missing codex shows install hint on send
-- [ ] Present codex streams assistant text
-- [ ] PWA connects via pair link
-- [ ] Text send and multi-turn work
-- [ ] Language toggle persists
-- [ ] Long-press mic fills editable draft
-- [ ] Setup wizard bilingual Tailscale and Cloudflare
-- [ ] Manifest / add to home screen basic
+# 手工验收清单
+
+给测试同学用：勾一项做一项。专有名首次用中文（英文）。
+
+- [ ] 安装依赖并启动电脑服务（`npm install` 后 `npm start`）
+- [ ] 健康检查接口正常（服务活着）
+- [ ] 配对接口能返回配对令牌（一把长钥匙）
+- [ ] 未带令牌访问受保护状态会被拒绝
+- [ ] 电脑没有 `codex` 时，发送消息会提示安装/找不到
+- [ ] 电脑有 `codex` 时，助手文字能流式出来
+- [ ] 用带令牌的配对链接，手机浏览器能连上（可加到桌面的网页）
+- [ ] 发文字、多轮对话正常
+- [ ] 中英文切换后能记住
+- [ ] 长按麦克风能填进可编辑草稿
+- [ ] 出门向导：私人组网（Tailscale）与备选公开隧道（Cloudflare）文案双语可走
+- [ ] 网页清单（manifest）与「添加到主屏幕」基本可用
